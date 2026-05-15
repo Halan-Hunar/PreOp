@@ -6,6 +6,9 @@ const { auth, authorize } = require('../middleware/auth');
 
 router.use(auth);
 
+// Block receptionists from all assessment routes
+router.use(authorize('anaesthetist', 'admin'));
+
 // GET /api/assessments — list with filters
 router.get('/', async (req, res) => {
   try {
@@ -116,7 +119,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/assessments — create new assessment (draft)
-router.post('/', authorize('anaesthetist', 'admin'), [
+router.post('/', authorize('anaesthetist'), [
   body('patient_id').isInt(),
   body('appointment_id').optional().isInt(),
   body('asa_classification').isIn(['I','II','III','IV','V','VI']),
@@ -202,8 +205,8 @@ router.post('/', authorize('anaesthetist', 'admin'), [
   }
 });
 
-// PUT /api/assessments/:id — update assessment
-router.put('/:id', authorize('anaesthetist', 'admin'), async (req, res) => {
+// PUT /api/assessments/:id — update assessment (only creator)
+router.put('/:id', authorize('anaesthetist'), async (req, res) => {
   try {
     const [assessments] = await db.query(
       'SELECT * FROM assessments WHERE id = ?',
@@ -216,8 +219,13 @@ router.put('/:id', authorize('anaesthetist', 'admin'), async (req, res) => {
 
     const assessment = assessments[0];
 
-    // Can't edit approved assessments unless admin
-    if (assessment.status === 'approved' && req.user.role !== 'admin') {
+    // Only the creator can edit
+    if (assessment.created_by !== req.user.id) {
+      return res.status(403).json({ error: 'You can only edit your own assessments' });
+    }
+
+    // Can't edit approved assessments
+    if (assessment.status === 'approved') {
       return res.status(403).json({ error: 'Cannot edit an approved assessment' });
     }
 
@@ -308,7 +316,7 @@ router.post('/:id/submit', authorize('anaesthetist', 'admin'), async (req, res) 
 });
 
 // POST /api/assessments/:id/clearance — add clearance decision
-router.post('/:id/clearance', authorize('anaesthetist', 'admin'), [
+router.post('/:id/clearance', authorize('anaesthetist'), [
   body('decision').isIn(['cleared', 'conditional', 'not_cleared']),
   body('conditions').optional().trim(),
   body('reason').optional().trim(),

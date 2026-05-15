@@ -97,7 +97,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/patients — register new patient
-router.post('/', authorize('admin', 'receptionist', 'nurse'), [
+router.post('/', authorize('receptionist', 'nurse'), [
   body('full_name').trim().notEmpty().isLength({ max: 100 }),
   body('dob').isDate(),
   body('gender').isIn(['male', 'female']),
@@ -153,7 +153,7 @@ router.post('/', authorize('admin', 'receptionist', 'nurse'), [
 });
 
 // PUT /api/patients/:id — update patient
-router.put('/:id', authorize('admin', 'receptionist', 'nurse'), [
+router.put('/:id', authorize('receptionist', 'nurse'), [
   body('full_name').optional().trim().notEmpty().isLength({ max: 100 }),
   body('dob').optional().isDate(),
   body('gender').optional().isIn(['male', 'female']),
