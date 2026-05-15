@@ -61,6 +61,11 @@ router.get('/:id', async (req, res) => {
 
     const patient = patients[0];
 
+    // Anaesthetists can only view full details of their assigned patients
+    if (req.user.role === 'anaesthetist' && patient.assigned_doctor_id !== req.user.id) {
+      return res.status(403).json({ error: 'This patient is not assigned to you' });
+    }
+
     // Get appointments
     const [appointments] = await db.query(
       `SELECT a.*, u.name as doctor_name
@@ -70,6 +75,11 @@ router.get('/:id', async (req, res) => {
        ORDER BY a.scheduled_date DESC`,
       [patient.id]
     );
+
+    // Receptionists don't see assessments or clearances
+    if (req.user.role === 'receptionist' || req.user.role === 'nurse') {
+      return res.json({ patient, appointments, assessments: [], clearances: [] });
+    }
 
     // Get assessments summary
     const [assessments] = await db.query(
@@ -198,6 +208,49 @@ router.put('/:id', authorize('receptionist', 'nurse'), [
     );
 
     res.json({ message: 'Patient updated' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/patients/:id/assign-doctor — assign doctor to patient (receptionist/admin)
+router.put('/:id/assign-doctor', authorize('admin', 'receptionist'), [
+  body('doctor_id').isInt(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const [patients] = await db.query(
+      'SELECT id FROM patients WHERE id = ? AND is_active = TRUE',
+      [req.params.id]
+    );
+    if (patients.length === 0) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    const [doctors] = await db.query(
+      "SELECT id FROM users WHERE id = ? AND role = 'anaesthetist' AND is_active = TRUE",
+      [req.body.doctor_id]
+    );
+    if (doctors.length === 0) {
+      return res.status(404).json({ error: 'Anaesthetist not found' });
+    }
+
+    await db.query(
+      'UPDATE patients SET assigned_doctor_id = ? WHERE id = ?',
+      [req.body.doctor_id, req.params.id]
+    );
+
+    await db.query(
+      'INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, ?, ?, ?)',
+      [req.user.id, 'assign_doctor', 'patients', req.params.id]
+    );
+
+    res.json({ message: 'Doctor assigned successfully' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

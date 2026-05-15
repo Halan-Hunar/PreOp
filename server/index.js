@@ -29,6 +29,7 @@ app.use('/api/patients', require('./routes/patients'));
 app.use('/api/appointments', require('./routes/appointments'));
 app.use('/api/assessments', require('./routes/assessments'));
 app.use('/api/users', require('./routes/users'));
+app.use('/api/attendance', require('./routes/attendance'));
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
