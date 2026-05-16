@@ -7,12 +7,25 @@ const { auth, authorize } = require('../middleware/auth');
 
 router.use(auth);
 
-// GET /api/users — list all staff (admin only)
-router.get('/', authorize('admin'), async (req, res) => {
+// GET /api/users — list staff (admin + receptionist; supports ?role= and ?active=)
+router.get('/', authorize('admin', 'receptionist'), async (req, res) => {
   try {
-    const [users] = await db.query(
-      'SELECT id, name, email, role, is_active, last_login, created_at FROM users ORDER BY created_at DESC'
-    );
+    const { role, active } = req.query;
+    let queryStr =
+      'SELECT id, name, email, role, is_active, last_login, created_at FROM users WHERE 1=1';
+    const params = [];
+
+    if (role) {
+      queryStr += ' AND role = ?';
+      params.push(role);
+    }
+    if (active === 'true' || active === '1') {
+      queryStr += ' AND is_active = TRUE';
+    }
+
+    queryStr += ' ORDER BY name ASC';
+
+    const [users] = await db.query(queryStr, params);
     res.json({ users });
   } catch (err) {
     console.error(err);

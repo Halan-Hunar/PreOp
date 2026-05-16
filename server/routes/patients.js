@@ -14,10 +14,17 @@ router.get('/', async (req, res) => {
     const offset = (page - 1) * limit;
 
     let queryStr = `
-      SELECT id, full_name, dob, gender, blood_type, national_id, phone, email, created_at
+      SELECT id, full_name, dob, gender, blood_type, national_id, phone, email,
+             assigned_doctor_id, created_at
       FROM patients WHERE is_active = TRUE
     `;
     const params = [];
+
+    // Anaesthetists only see patients explicitly assigned to them.
+    if (req.user.role === 'anaesthetist') {
+      queryStr += ' AND assigned_doctor_id = ?';
+      params.push(req.user.id);
+    }
 
     if (search) {
       queryStr += ` AND (full_name LIKE ? OR national_id LIKE ? OR phone LIKE ?)`;
@@ -29,11 +36,18 @@ router.get('/', async (req, res) => {
 
     const [patients] = await db.query(queryStr, params);
 
-    // Total count for pagination
-    const [countResult] = await db.query(
-      `SELECT COUNT(*) as total FROM patients WHERE is_active = TRUE ${search ? 'AND (full_name LIKE ? OR national_id LIKE ? OR phone LIKE ?)' : ''}`,
-      search ? [`%${search}%`, `%${search}%`, `%${search}%`] : []
-    );
+    // Total count for pagination — must apply the same filters
+    let countStr = 'SELECT COUNT(*) as total FROM patients WHERE is_active = TRUE';
+    const countParams = [];
+    if (req.user.role === 'anaesthetist') {
+      countStr += ' AND assigned_doctor_id = ?';
+      countParams.push(req.user.id);
+    }
+    if (search) {
+      countStr += ' AND (full_name LIKE ? OR national_id LIKE ? OR phone LIKE ?)';
+      countParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    const [countResult] = await db.query(countStr, countParams);
 
     res.json({
       patients,
@@ -51,7 +65,10 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const [patients] = await db.query(
-      'SELECT * FROM patients WHERE id = ? AND is_active = TRUE',
+      `SELECT p.*, u.name as assigned_doctor_name
+       FROM patients p
+       LEFT JOIN users u ON p.assigned_doctor_id = u.id
+       WHERE p.id = ? AND p.is_active = TRUE`,
       [req.params.id]
     );
 
