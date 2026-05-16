@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getPatient } from '../api/patients'
-import { createAssessment } from '../api/assessments'
+import { createAssessment, listAssessments } from '../api/assessments'
 import Spinner from '../components/Spinner'
 import StatusBadge, { asaVariant } from '../components/StatusBadge'
 import { useAuth } from '../context/AuthContext'
@@ -18,10 +18,13 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-const TABS = [
+const BASE_TABS = [
   { id: 'overview', label: 'Overview', icon: 'person' },
-  { id: 'assessments', label: 'Assessments', icon: 'assignment' },
   { id: 'appointments', label: 'Appointments', icon: 'event' },
+]
+
+const CLINICAL_TABS = [
+  { id: 'assessments', label: 'Assessments', icon: 'assignment' },
   { id: 'clearances', label: 'Clearances', icon: 'verified' },
 ]
 
@@ -34,6 +37,12 @@ export default function PatientProfile() {
   const [error, setError] = useState('')
   const [tab, setTab] = useState('overview')
   const [creating, setCreating] = useState(false)
+
+  // Only clinicians see assessment / clearance tabs.
+  const canSeeClinical = hasRole('anaesthetist')
+  const tabs = canSeeClinical
+    ? [BASE_TABS[0], ...CLINICAL_TABS, BASE_TABS[1]]
+    : BASE_TABS
 
   const load = async () => {
     setLoading(true)
@@ -56,6 +65,14 @@ export default function PatientProfile() {
   const startAssessment = async () => {
     setCreating(true)
     try {
+      // Reuse an existing draft for this patient instead of creating duplicates.
+      const existing = await listAssessments({ patient_id: id, status: 'draft' })
+      const draft = existing.assessments?.[0]
+      if (draft) {
+        navigate(`/assessments/${draft.id}`)
+        return
+      }
+
       const result = await createAssessment({
         patient_id: parseInt(id, 10),
         asa_classification: 'II',
@@ -162,7 +179,7 @@ export default function PatientProfile() {
       </div>
 
       <div className="flex gap-1 border-b border-outline-variant overflow-x-auto custom-scrollbar">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -179,7 +196,7 @@ export default function PatientProfile() {
           </button>
         ))}
         <div className="ml-auto flex items-center pr-2">
-          {hasRole('admin', 'anaesthetist') && (
+          {canSeeClinical && (
             <button
               onClick={startAssessment}
               disabled={creating}

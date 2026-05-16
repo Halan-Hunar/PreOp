@@ -41,7 +41,7 @@ export default function Dashboard() {
       setError('')
       try {
         const promises = [getTodayAppointments()]
-        if (hasRole('anaesthetist', 'admin')) {
+        if (hasRole('anaesthetist')) {
           promises.push(listPendingAssessments())
         }
         const results = await Promise.all(promises)
@@ -173,7 +173,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {hasRole('anaesthetist', 'admin') && (
+      {hasRole('anaesthetist') && (
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-on-surface">Pending Assessments</h2>

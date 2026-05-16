@@ -16,7 +16,9 @@ export default function PatientList() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { hasRole } = useAuth()
-  const canCreate = hasRole('admin', 'receptionist', 'nurse')
+  // Only front-desk staff register patients. Admins are read-only here,
+  // anaesthetists view patients but don't create them.
+  const canCreate = hasRole('receptionist', 'nurse')
 
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1', 10))

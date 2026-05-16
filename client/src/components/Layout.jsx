@@ -36,7 +36,9 @@ export default function Layout() {
     navigate('/login')
   }
 
-  const canCreate = hasRole('admin', 'anaesthetist')
+  // Only anaesthetists kick off new evaluations — admins/receptionists/nurses
+  // don't run the clinical workflow.
+  const canStartEvaluation = hasRole('anaesthetist')
 
   return (
     <div className="min-h-screen bg-background text-on-background">
@@ -70,7 +72,7 @@ export default function Layout() {
             >
               <span className="material-symbols-outlined">notifications</span>
             </button>
-            {canCreate && (
+            {canStartEvaluation && (
               <button
                 onClick={() => navigate('/patients')}
                 className="px-4 py-2 bg-secondary text-on-secondary rounded-lg font-semibold text-sm hover:opacity-90 active:scale-95 transition-all flex items-center gap-2"

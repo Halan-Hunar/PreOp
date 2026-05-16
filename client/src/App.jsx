@@ -11,6 +11,7 @@ import AppointmentCalendar from './pages/AppointmentCalendar'
 import AssessmentForm from './pages/AssessmentForm'
 import ClearanceView from './pages/ClearanceView'
 import Reports from './pages/Reports'
+import Settings from './pages/Settings'
 import AdminUsers from './pages/AdminUsers'
 import AdminLogs from './pages/AdminLogs'
 
@@ -31,7 +32,7 @@ export default function App() {
         <Route
           path="/patients/new"
           element={
-            <ProtectedRoute roles={['admin', 'receptionist', 'nurse']}>
+            <ProtectedRoute roles={['receptionist', 'nurse']}>
               <NewPatient />
             </ProtectedRoute>
           }
@@ -41,7 +42,7 @@ export default function App() {
         <Route
           path="/assessments/:id"
           element={
-            <ProtectedRoute roles={['admin', 'anaesthetist']}>
+            <ProtectedRoute roles={['anaesthetist']}>
               <AssessmentForm />
             </ProtectedRoute>
           }
@@ -49,12 +50,13 @@ export default function App() {
         <Route
           path="/assessments/:id/clearance"
           element={
-            <ProtectedRoute roles={['admin', 'anaesthetist']}>
+            <ProtectedRoute roles={['anaesthetist']}>
               <ClearanceView />
             </ProtectedRoute>
           }
         />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/settings" element={<Settings />} />
         <Route
           path="/admin/users"
           element={
