@@ -201,71 +201,77 @@ export default function Reports() {
     try {
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt' })
       const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const marginX = 40
+      const headerY = 40
+      const bodyTop = 90 // y where the first section title sits
 
-      doc.setFontSize(16)
-      doc.setTextColor(11, 28, 48)
-      doc.text('PreOp Clinical Suite', 40, 40)
-      doc.setFontSize(11)
-      doc.setTextColor(118, 119, 125)
-      doc.text(`Monthly Report — ${rangeLabel}`, 40, 58)
-      const generated = `Generated ${new Date().toLocaleString()}`
-      doc.text(generated, pageWidth - 40 - doc.getTextWidth(generated), 58)
+      const drawHeader = () => {
+        doc.setFontSize(16)
+        doc.setTextColor(11, 28, 48)
+        doc.text('PreOp Clinical Suite', marginX, headerY)
+        doc.setFontSize(11)
+        doc.setTextColor(118, 119, 125)
+        doc.text(`Monthly Report — ${rangeLabel}`, marginX, headerY + 18)
+        const generated = `Generated ${new Date().toLocaleString()}`
+        doc.text(
+          generated,
+          pageWidth - marginX - doc.getTextWidth(generated),
+          headerY + 18
+        )
+      }
 
-      const addTable = (title, rows) => {
+      drawHeader()
+
+      let cursorY = bodyTop
+
+      const drawSection = (title, rows) => {
         if (!rows.length) return
+
+        // If the title would crowd the page bottom, start a fresh page.
+        if (cursorY > pageHeight - 120) {
+          doc.addPage()
+          drawHeader()
+          cursorY = bodyTop
+        }
+
+        doc.setFontSize(14)
+        doc.setTextColor(11, 28, 48)
+        doc.text(title, marginX, cursorY)
+
         const cols = Object.keys(rows[0])
-        const body = rows.map((r) => cols.map((c) => r[c] ?? ''))
+        const body = rows.map((r) => cols.map((c) => (r[c] ?? '').toString()))
+
         autoTable(doc, {
           head: [cols],
           body,
-          startY: (doc.lastAutoTable?.finalY || 70) + 24,
-          margin: { left: 40, right: 40 },
+          startY: cursorY + 10,
+          margin: { left: marginX, right: marginX, bottom: 40 },
           styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' },
           headStyles: {
-            fillColor: [0, 106, 97], // secondary
+            fillColor: [0, 106, 97], // secondary teal
             textColor: 255,
             fontStyle: 'bold',
           },
           alternateRowStyles: { fillColor: [239, 244, 255] },
-          didDrawPage: () => {
-            doc.setFontSize(14)
-            doc.setTextColor(11, 28, 48)
-            doc.text(title, 40, (doc.lastAutoTable?.finalY || 70) - 10)
-          },
         })
+
+        cursorY = (doc.lastAutoTable?.finalY || cursorY + 20) + 30
       }
 
-      // First section title sits below the header banner.
-      doc.setFontSize(14)
-      doc.setTextColor(11, 28, 48)
-      doc.text('Patients', 40, 90)
-      autoTable(doc, {
-        head: [Object.keys(patientRows()[0] || { Name: '' })],
-        body: patientRows().map((r) => Object.values(r).map((v) => v ?? '')),
-        startY: 100,
-        margin: { left: 40, right: 40 },
-        styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' },
-        headStyles: { fillColor: [0, 106, 97], textColor: 255, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [239, 244, 255] },
-      })
+      drawSection('Patients', patientRows())
+      drawSection('Appointments', appointmentRows())
+      drawSection('Assessments', assessmentRows())
+      drawSection('Staff Attendance', attendanceRows())
 
-      addTable('Appointments', appointmentRows())
-      addTable('Assessments', assessmentRows())
-      addTable('Staff Attendance', attendanceRows())
-
-      // Page numbers
+      // Page numbers — drawn last so they sit on top of every page footer.
       const totalPages = doc.internal.getNumberOfPages()
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i)
         doc.setFontSize(9)
         doc.setTextColor(118, 119, 125)
-        const pageWidthI = doc.internal.pageSize.getWidth()
-        const pageHeight = doc.internal.pageSize.getHeight()
-        doc.text(
-          `Page ${i} of ${totalPages}`,
-          pageWidthI - 40 - doc.getTextWidth(`Page ${i} of ${totalPages}`),
-          pageHeight - 20
-        )
+        const label = `Page ${i} of ${totalPages}`
+        doc.text(label, pageWidth - marginX - doc.getTextWidth(label), pageHeight - 20)
       }
 
       doc.save(`PreOp_Report_${year}-${pad(month)}.pdf`)

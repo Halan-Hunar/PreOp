@@ -6,11 +6,11 @@ const { auth, authorize } = require('../middleware/auth');
 
 router.use(auth);
 
-// Block receptionists from all assessment routes
-router.use(authorize('anaesthetist', 'admin'));
+// Per-route authorisation below. The list endpoint is open to receptionist
+// (read-only metadata for reports); detail / mutation routes stay clinical-only.
 
-// GET /api/assessments — list with filters
-router.get('/', async (req, res) => {
+// GET /api/assessments — list with filters (admin, anaesthetist, receptionist)
+router.get('/', authorize('admin', 'anaesthetist', 'receptionist'), async (req, res) => {
   try {
     const { patient_id, status, created_by, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
@@ -205,8 +205,8 @@ router.post('/', authorize('anaesthetist'), [
   }
 });
 
-// PUT /api/assessments/:id — update assessment (only creator)
-router.put('/:id', authorize('anaesthetist'), async (req, res) => {
+// PUT /api/assessments/:id — update assessment (creator or admin, any status)
+router.put('/:id', authorize('anaesthetist', 'admin'), async (req, res) => {
   try {
     const [assessments] = await db.query(
       'SELECT * FROM assessments WHERE id = ?',
@@ -219,14 +219,9 @@ router.put('/:id', authorize('anaesthetist'), async (req, res) => {
 
     const assessment = assessments[0];
 
-    // Only the creator can edit
-    if (assessment.created_by !== req.user.id) {
+    // Anaesthetists can only edit their own assessments; admins can edit any.
+    if (req.user.role !== 'admin' && assessment.created_by !== req.user.id) {
       return res.status(403).json({ error: 'You can only edit your own assessments' });
-    }
-
-    // Can't edit approved assessments
-    if (assessment.status === 'approved') {
-      return res.status(403).json({ error: 'Cannot edit an approved assessment' });
     }
 
     const allowed = [
@@ -276,6 +271,40 @@ router.put('/:id', authorize('anaesthetist'), async (req, res) => {
     );
 
     res.json({ message: 'Assessment updated' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/assessments/:id — remove assessment (creator or admin, any status)
+router.delete('/:id', authorize('anaesthetist', 'admin'), async (req, res) => {
+  try {
+    const [assessments] = await db.query(
+      'SELECT id, created_by FROM assessments WHERE id = ?',
+      [req.params.id]
+    );
+
+    if (assessments.length === 0) {
+      return res.status(404).json({ error: 'Assessment not found' });
+    }
+
+    if (req.user.role !== 'admin' && assessments[0].created_by !== req.user.id) {
+      return res.status(403).json({ error: 'You can only delete your own assessments' });
+    }
+
+    // Remove dependent rows first so the FKs don't reject the parent delete.
+    await db.query('DELETE FROM clearances WHERE assessment_id = ?', [req.params.id]);
+    await db.query('DELETE FROM lab_results WHERE assessment_id = ?', [req.params.id]);
+    await db.query('DELETE FROM clinical_notes WHERE assessment_id = ?', [req.params.id]);
+    await db.query('DELETE FROM assessments WHERE id = ?', [req.params.id]);
+
+    await db.query(
+      'INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, ?, ?, ?)',
+      [req.user.id, 'delete_assessment', 'assessments', req.params.id]
+    );
+
+    res.json({ message: 'Assessment deleted' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

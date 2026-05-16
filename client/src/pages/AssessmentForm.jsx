@@ -5,9 +5,12 @@ import {
   getAssessment,
   updateAssessment,
   submitAssessment,
+  deleteAssessment,
 } from '../api/assessments'
 import Spinner from '../components/Spinner'
 import StatusBadge from '../components/StatusBadge'
+import Modal from '../components/Modal'
+import { useAuth } from '../context/AuthContext'
 
 const inputClass =
   'w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all'
@@ -51,12 +54,15 @@ const cleanPayload = (values) => {
 export default function AssessmentForm() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user, hasRole } = useAuth()
   const [loading, setLoading] = useState(true)
   const [assessment, setAssessment] = useState(null)
   const [error, setError] = useState('')
   const [savingDraft, setSavingDraft] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm()
 
@@ -125,7 +131,25 @@ export default function AssessmentForm() {
     )
   }
 
-  const readOnly = assessment.status === 'approved'
+  // Creator or admin may modify; everyone else gets a read-only view.
+  const canModify =
+    hasRole('admin') || (hasRole('anaesthetist') && assessment.created_by === user?.id)
+  const isDraft = assessment.status === 'draft'
+  const isApproved = assessment.status === 'approved'
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    setError('')
+    try {
+      await deleteAssessment(id)
+      navigate(`/patients/${assessment.patient_id}`)
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to delete assessment')
+      setConfirmDelete(false)
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-6xl mx-auto">
@@ -393,7 +417,19 @@ export default function AssessmentForm() {
         </div>
       )}
 
-      <div className="sticky bottom-0 bg-surface/95 backdrop-blur border-t border-outline-variant -mx-8 px-8 py-4 flex justify-end gap-3">
+      <div className="sticky bottom-0 bg-surface/95 backdrop-blur border-t border-outline-variant -mx-8 px-8 py-4 flex flex-wrap items-center justify-end gap-3">
+        {canModify && (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="mr-auto px-5 py-2.5 border border-error text-error rounded-lg text-sm font-semibold hover:bg-error-container/40 transition-colors flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+              delete
+            </span>
+            Delete
+          </button>
+        )}
         <button
           type="button"
           onClick={() => navigate(`/patients/${assessment.patient_id}`)}
@@ -404,25 +440,67 @@ export default function AssessmentForm() {
         <button
           type="button"
           onClick={handleSubmit(saveDraft)}
-          disabled={savingDraft || readOnly}
+          disabled={savingDraft || !canModify}
           className="px-5 py-2.5 border border-secondary text-secondary rounded-lg text-sm font-semibold hover:bg-secondary-container/40 transition-colors disabled:opacity-60 flex items-center gap-2"
         >
           {savingDraft ? <Spinner size={16} /> : (
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>save</span>
           )}
-          Save Draft
+          {isDraft ? 'Save Draft' : 'Save Changes'}
         </button>
-        <button
-          type="submit"
-          disabled={submitting || readOnly || assessment.status !== 'draft'}
-          className="px-5 py-2.5 bg-secondary text-on-secondary rounded-lg text-sm font-semibold hover:opacity-90 active:scale-95 transition-all disabled:opacity-60 flex items-center gap-2"
-        >
-          {submitting ? <Spinner size={16} /> : (
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
-          )}
-          Submit for Clearance
-        </button>
+        {isDraft && (
+          <button
+            type="submit"
+            disabled={submitting || !canModify}
+            className="px-5 py-2.5 bg-secondary text-on-secondary rounded-lg text-sm font-semibold hover:opacity-90 active:scale-95 transition-all disabled:opacity-60 flex items-center gap-2"
+          >
+            {submitting ? <Spinner size={16} /> : (
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
+            )}
+            Submit for Clearance
+          </button>
+        )}
       </div>
+
+      <Modal
+        open={confirmDelete}
+        onClose={() => !deleting && setConfirmDelete(false)}
+        title="Delete assessment?"
+      >
+        <p className="text-sm text-on-surface">
+          This will permanently remove assessment #{assessment.id} along with any lab
+          results, clinical notes, and clearance decisions attached to it.
+        </p>
+        {isApproved && (
+          <p className="mt-3 text-xs bg-error-container text-on-error-container px-3 py-2 rounded-lg">
+            This assessment is currently <strong>approved</strong>. Deleting it removes a
+            finalised clinical record.
+          </p>
+        )}
+        <div className="flex justify-end gap-3 pt-4">
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(false)}
+            disabled={deleting}
+            className="px-4 py-2 border border-outline-variant rounded-lg text-sm font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="px-4 py-2 bg-error text-on-error rounded-lg text-sm font-semibold hover:opacity-90 active:scale-95 transition-all disabled:opacity-60 flex items-center gap-2"
+          >
+            {deleting ? <Spinner size={16} /> : (
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                delete_forever
+              </span>
+            )}
+            Delete permanently
+          </button>
+        </div>
+      </Modal>
     </form>
   )
 }

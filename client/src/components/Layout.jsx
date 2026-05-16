@@ -1,6 +1,7 @@
 import { Outlet, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import Sidebar from './Sidebar'
+import NotificationsBell from './NotificationsBell'
 import { useAuth } from '../context/AuthContext'
 
 function roleLabel(role) {
@@ -66,12 +67,7 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              className="p-2 text-on-surface-variant hover:text-secondary hover:bg-surface-container-high rounded-full transition-colors"
-              aria-label="Notifications"
-            >
-              <span className="material-symbols-outlined">notifications</span>
-            </button>
+            <NotificationsBell />
             {canStartEvaluation && (
               <button
                 onClick={() => navigate('/patients')}

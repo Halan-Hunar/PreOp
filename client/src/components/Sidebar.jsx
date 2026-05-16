@@ -9,9 +9,9 @@ const REPORTS = { to: '/reports', label: 'Reports', icon: 'analytics' }
 
 // role -> nav items shown in the main section
 const NAV_BY_ROLE = {
-  admin: [DASH],
+  admin: [DASH, REPORTS],
   anaesthetist: [DASH, PATIENTS, APPOINTMENTS],
-  receptionist: [DASH, PATIENTS, APPOINTMENTS],
+  receptionist: [DASH, PATIENTS, APPOINTMENTS, REPORTS],
   nurse: [DASH, PATIENTS, APPOINTMENTS],
 }
 
@@ -26,7 +26,6 @@ const STAFF_SECTION = {
 const ADMIN_ITEMS = [
   { to: '/admin/users', label: 'Staff Accounts', icon: 'manage_accounts' },
   { to: '/admin/logs', label: 'Activity Logs', icon: 'fact_check' },
-  REPORTS,
 ]
 
 function Item({ to, label, icon, end, onClick }) {

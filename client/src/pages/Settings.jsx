@@ -163,6 +163,36 @@ export default function Settings() {
           </p>
         </form>
       </section>
+
+      <section className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm overflow-hidden">
+        <div className="px-6 py-4 bg-surface-container-low border-b border-outline-variant flex items-center gap-3">
+          <span className="material-symbols-outlined text-secondary">tune</span>
+          <h2 className="text-base font-semibold text-on-surface">Session</h2>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-sm font-semibold text-on-surface">Sign out of this device</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Ends your current session. You'll need to sign in again to return.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                await logout()
+                navigate('/login', { replace: true })
+              }}
+              className="px-5 py-2.5 border border-error text-error rounded-lg font-semibold text-sm hover:bg-error-container/40 transition-colors flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                logout
+              </span>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }

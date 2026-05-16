@@ -16,15 +16,20 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// Rate limit login endpoint
+// Rate limit only the login endpoint (POST /api/auth/login).
+// `skipSuccessfulRequests` means good logins don't burn the budget — only
+// repeated failures count, which is what brute-force protection actually wants.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
+  max: 20,
+  skipSuccessfulRequests: true,
   message: { error: 'Too many login attempts. Try again later.' },
 });
 
-// Routes
-app.use('/api/auth', loginLimiter, require('./routes/auth'));
+// Routes — limiter wired to /login only so /me and /logout aren't throttled.
+const authRouter = require('./routes/auth');
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth', authRouter);
 app.use('/api/patients', require('./routes/patients'));
 app.use('/api/appointments', require('./routes/appointments'));
 app.use('/api/assessments', require('./routes/assessments'));

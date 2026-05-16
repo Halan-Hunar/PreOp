@@ -15,6 +15,9 @@ export const createAssessment = (data) =>
 export const updateAssessment = (id, data) =>
   client.put(`/assessments/${id}`, data).then((r) => r.data)
 
+export const deleteAssessment = (id) =>
+  client.delete(`/assessments/${id}`).then((r) => r.data)
+
 export const submitAssessment = (id) =>
   client.post(`/assessments/${id}/submit`).then((r) => r.data)
 
