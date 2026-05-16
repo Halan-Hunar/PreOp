@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getPatient } from '../api/patients'
+import { getPatient, assignDoctor } from '../api/patients'
 import { createAssessment, listAssessments } from '../api/assessments'
+import { listUsers } from '../api/users'
 import Spinner from '../components/Spinner'
 import StatusBadge, { asaVariant } from '../components/StatusBadge'
 import { useAuth } from '../context/AuthContext'
@@ -37,9 +38,14 @@ export default function PatientProfile() {
   const [error, setError] = useState('')
   const [tab, setTab] = useState('overview')
   const [creating, setCreating] = useState(false)
+  const [doctors, setDoctors] = useState([])
+  const [doctorId, setDoctorId] = useState('')
+  const [savingDoctor, setSavingDoctor] = useState(false)
+  const [doctorMsg, setDoctorMsg] = useState('')
 
   // Only clinicians see assessment / clearance tabs.
   const canSeeClinical = hasRole('anaesthetist')
+  const canAssignDoctor = hasRole('admin', 'receptionist')
   const tabs = canSeeClinical
     ? [BASE_TABS[0], ...CLINICAL_TABS, BASE_TABS[1]]
     : BASE_TABS
@@ -50,6 +56,7 @@ export default function PatientProfile() {
     try {
       const result = await getPatient(id)
       setData(result)
+      setDoctorId(result.patient?.assigned_doctor_id?.toString() || '')
     } catch (e) {
       setError(e.response?.data?.error || 'Failed to load patient')
     } finally {
@@ -61,6 +68,37 @@ export default function PatientProfile() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  useEffect(() => {
+    if (!canAssignDoctor) return
+    let cancelled = false
+    listUsers({ role: 'anaesthetist', active: 'true' })
+      .then((r) => {
+        if (!cancelled) setDoctors(r.users || [])
+      })
+      .catch(() => {
+        /* non-fatal — section will show empty list */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [canAssignDoctor])
+
+  const onAssignDoctor = async () => {
+    if (!doctorId) return
+    setSavingDoctor(true)
+    setDoctorMsg('')
+    try {
+      await assignDoctor(id, parseInt(doctorId, 10))
+      setDoctorMsg('Doctor assigned')
+      await load()
+      setTimeout(() => setDoctorMsg(''), 2500)
+    } catch (e) {
+      setDoctorMsg(e.response?.data?.error || 'Failed to assign')
+    } finally {
+      setSavingDoctor(false)
+    }
+  }
 
   const startAssessment = async () => {
     setCreating(true)
@@ -165,14 +203,13 @@ export default function PatientProfile() {
             </div>
             <div>
               <p className="text-xs font-semibold text-outline uppercase tracking-wider mb-1">
-                Emergency
+                Assigned Doctor
               </p>
               <p className="font-semibold text-on-surface">
-                {patient.emergency_contact_name || '—'}
+                {patient.assigned_doctor_name || (
+                  <span className="text-on-surface-variant font-normal">Unassigned</span>
+                )}
               </p>
-              {patient.emergency_contact_phone && (
-                <p className="text-xs text-on-surface-variant">{patient.emergency_contact_phone}</p>
-              )}
             </div>
           </div>
         </div>
@@ -210,6 +247,58 @@ export default function PatientProfile() {
           )}
         </div>
       </div>
+
+      {tab === 'overview' && canAssignDoctor && (
+        <section className="bg-surface-container-lowest rounded-xl border border-outline-variant p-6">
+          <h3 className="text-base font-semibold text-on-surface mb-4 flex items-center gap-2">
+            <span className="material-symbols-outlined text-secondary">assignment_ind</span>
+            Assign Doctor
+          </h3>
+          <p className="text-sm text-on-surface-variant mb-4">
+            {patient.assigned_doctor_name
+              ? `Currently assigned to ${patient.assigned_doctor_name}.`
+              : 'No anaesthetist assigned yet.'}
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[220px]">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
+                Anaesthetist
+              </label>
+              <select
+                value={doctorId}
+                onChange={(e) => setDoctorId(e.target.value)}
+                className="w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
+              >
+                <option value="">Select an anaesthetist…</option>
+                {doctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={onAssignDoctor}
+              disabled={
+                savingDoctor ||
+                !doctorId ||
+                doctorId === (patient.assigned_doctor_id?.toString() || '')
+              }
+              className="px-5 py-2.5 bg-secondary text-on-secondary rounded-lg font-semibold text-sm hover:opacity-90 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60"
+            >
+              {savingDoctor ? <Spinner size={16} /> : (
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>save</span>
+              )}
+              Save
+            </button>
+            {doctorMsg && (
+              <span className="text-xs text-on-secondary-container bg-secondary-container px-3 py-1 rounded-full">
+                {doctorMsg}
+              </span>
+            )}
+          </div>
+        </section>
+      )}
 
       {tab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

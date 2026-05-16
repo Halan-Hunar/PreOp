@@ -12,6 +12,7 @@ import AssessmentForm from './pages/AssessmentForm'
 import ClearanceView from './pages/ClearanceView'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
+import Attendance from './pages/Attendance'
 import AdminUsers from './pages/AdminUsers'
 import AdminLogs from './pages/AdminLogs'
 
@@ -55,7 +56,22 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/reports" element={<Reports />} />
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <Reports />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/attendance"
+          element={
+            <ProtectedRoute roles={['admin', 'receptionist']}>
+              <Attendance />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/settings" element={<Settings />} />
         <Route
           path="/admin/users"

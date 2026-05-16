@@ -14,3 +14,6 @@ export const updatePatient = (id, data) =>
 
 export const deletePatient = (id) =>
   client.delete(`/patients/${id}`).then((r) => r.data)
+
+export const assignDoctor = (id, doctor_id) =>
+  client.put(`/patients/${id}/assign-doctor`, { doctor_id }).then((r) => r.data)

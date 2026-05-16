@@ -1,31 +1,32 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
+const DASH = { to: '/', label: 'Dashboard', icon: 'dashboard', end: true }
+const PATIENTS = { to: '/patients', label: 'Patient Profiles', icon: 'group' }
+const APPOINTMENTS = { to: '/appointments', label: 'Surgical Schedule', icon: 'calendar_month' }
+const ATTENDANCE = { to: '/attendance', label: 'Staff Attendance', icon: 'badge' }
+const REPORTS = { to: '/reports', label: 'Reports', icon: 'analytics' }
+
 // role -> nav items shown in the main section
 const NAV_BY_ROLE = {
-  admin: [
-    { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
-  ],
-  anaesthetist: [
-    { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
-    { to: '/patients', label: 'Patient Profiles', icon: 'group' },
-    { to: '/appointments', label: 'Surgical Schedule', icon: 'calendar_month' },
-  ],
-  receptionist: [
-    { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
-    { to: '/patients', label: 'Patient Profiles', icon: 'group' },
-    { to: '/appointments', label: 'Surgical Schedule', icon: 'calendar_month' },
-  ],
-  nurse: [
-    { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
-    { to: '/patients', label: 'Patient Profiles', icon: 'group' },
-    { to: '/appointments', label: 'Surgical Schedule', icon: 'calendar_month' },
-  ],
+  admin: [DASH],
+  anaesthetist: [DASH, PATIENTS, APPOINTMENTS],
+  receptionist: [DASH, PATIENTS, APPOINTMENTS],
+  nurse: [DASH, PATIENTS, APPOINTMENTS],
+}
+
+// Sections that appear below the primary nav, keyed by role.
+const STAFF_SECTION = {
+  admin: [ATTENDANCE],
+  receptionist: [ATTENDANCE],
+  nurse: [],
+  anaesthetist: [],
 }
 
 const ADMIN_ITEMS = [
   { to: '/admin/users', label: 'Staff Accounts', icon: 'manage_accounts' },
   { to: '/admin/logs', label: 'Activity Logs', icon: 'fact_check' },
+  REPORTS,
 ]
 
 function Item({ to, label, icon, end, onClick }) {
@@ -53,6 +54,7 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const isAdmin = hasRole('admin')
   const navItems = NAV_BY_ROLE[user?.role] || []
+  const staffItems = STAFF_SECTION[user?.role] || []
 
   return (
     <aside className="fixed left-0 top-0 h-full w-[280px] bg-surface-container-low border-r border-outline-variant flex flex-col z-40">
@@ -70,6 +72,17 @@ export default function Sidebar() {
         {navItems.map((item) => (
           <Item key={item.to} {...item} />
         ))}
+
+        {staffItems.length > 0 && (
+          <>
+            <div className="px-6 pt-6 pb-2 text-xs font-semibold uppercase tracking-wider text-outline">
+              Staff
+            </div>
+            {staffItems.map((item) => (
+              <Item key={item.to} {...item} />
+            ))}
+          </>
+        )}
 
         {isAdmin && (
           <>

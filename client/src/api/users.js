@@ -1,6 +1,7 @@
 import client from './client'
 
-export const listUsers = () => client.get('/users').then((r) => r.data)
+export const listUsers = (params = {}) =>
+  client.get('/users', { params }).then((r) => r.data)
 
 export const createUser = (data) =>
   client.post('/users', data).then((r) => r.data)
