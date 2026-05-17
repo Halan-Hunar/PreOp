@@ -6,6 +6,7 @@ import { listUsers } from '../api/users'
 import Spinner from '../components/Spinner'
 import StatusBadge, { asaVariant } from '../components/StatusBadge'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 
 function calcAge(dob) {
   if (!dob) return ''
@@ -14,25 +15,23 @@ function calcAge(dob) {
   return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24 * 365.25))
 }
 
-function fmtDate(d) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
+const BASE_TAB_IDS = ['overview', 'appointments']
+const CLINICAL_TAB_IDS = ['assessments', 'clearances']
+
+const TAB_ICONS = {
+  overview: 'person',
+  appointments: 'event',
+  assessments: 'assignment',
+  clearances: 'verified',
 }
-
-const BASE_TABS = [
-  { id: 'overview', label: 'Overview', icon: 'person' },
-  { id: 'appointments', label: 'Appointments', icon: 'event' },
-]
-
-const CLINICAL_TABS = [
-  { id: 'assessments', label: 'Assessments', icon: 'assignment' },
-  { id: 'clearances', label: 'Clearances', icon: 'verified' },
-]
 
 export default function PatientProfile() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { hasRole } = useAuth()
+  const { t, lang, dr } = useLanguage()
+  const localeTag = lang === 'ku' ? 'ku' : undefined
+
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -43,12 +42,20 @@ export default function PatientProfile() {
   const [savingDoctor, setSavingDoctor] = useState(false)
   const [doctorMsg, setDoctorMsg] = useState('')
 
-  // Only clinicians see assessment / clearance tabs.
   const canSeeClinical = hasRole('anaesthetist')
   const canAssignDoctor = hasRole('admin', 'receptionist')
-  const tabs = canSeeClinical
-    ? [BASE_TABS[0], ...CLINICAL_TABS, BASE_TABS[1]]
-    : BASE_TABS
+  const tabIds = canSeeClinical
+    ? [BASE_TAB_IDS[0], ...CLINICAL_TAB_IDS, BASE_TAB_IDS[1]]
+    : BASE_TAB_IDS
+
+  const fmtDate = (d) => {
+    if (!d) return '—'
+    return new Date(d).toLocaleDateString(localeTag, {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    })
+  }
 
   const load = async () => {
     setLoading(true)
@@ -58,7 +65,7 @@ export default function PatientProfile() {
       setData(result)
       setDoctorId(result.patient?.assigned_doctor_id?.toString() || '')
     } catch (e) {
-      setError(e.response?.data?.error || 'Failed to load patient')
+      setError(e.response?.data?.error || t('common.failedLoad'))
     } finally {
       setLoading(false)
     }
@@ -76,9 +83,7 @@ export default function PatientProfile() {
       .then((r) => {
         if (!cancelled) setDoctors(r.users || [])
       })
-      .catch(() => {
-        /* non-fatal — section will show empty list */
-      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }
@@ -90,11 +95,11 @@ export default function PatientProfile() {
     setDoctorMsg('')
     try {
       await assignDoctor(id, parseInt(doctorId, 10))
-      setDoctorMsg('Doctor assigned')
+      setDoctorMsg(t('patientProfile.assignDoctor.saved'))
       await load()
       setTimeout(() => setDoctorMsg(''), 2500)
     } catch (e) {
-      setDoctorMsg(e.response?.data?.error || 'Failed to assign')
+      setDoctorMsg(e.response?.data?.error || t('common.failedSave'))
     } finally {
       setSavingDoctor(false)
     }
@@ -103,7 +108,6 @@ export default function PatientProfile() {
   const startAssessment = async () => {
     setCreating(true)
     try {
-      // Reuse an existing draft for this patient instead of creating duplicates.
       const existing = await listAssessments({ patient_id: id, status: 'draft' })
       const draft = existing.assessments?.[0]
       if (draft) {
@@ -117,7 +121,7 @@ export default function PatientProfile() {
       })
       navigate(`/assessments/${result.id}`)
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to create assessment')
+      alert(e.response?.data?.error || t('patientProfile.failedCreate'))
     } finally {
       setCreating(false)
     }
@@ -133,9 +137,7 @@ export default function PatientProfile() {
 
   if (error || !data) {
     return (
-      <div className="bg-error-container text-on-error-container p-6 rounded-xl">
-        {error || 'Patient not found'}
-      </div>
+      <div className="bg-error-container text-on-error-container p-6 rounded-xl">{error || ''}</div>
     )
   }
 
@@ -148,6 +150,8 @@ export default function PatientProfile() {
     .toUpperCase()
 
   const latestAsa = assessments?.find((a) => a.asa_classification)?.asa_classification
+  const genderLabel = patient.gender ? t(`gender.${patient.gender}`) : ''
+  const ageText = t('patientProfile.yearsOld', { age: calcAge(patient.dob) })
 
   return (
     <div className="space-y-6">
@@ -159,7 +163,7 @@ export default function PatientProfile() {
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
             arrow_back
           </span>
-          All patients
+          {t('patientProfile.back')}
         </button>
 
         <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
@@ -170,8 +174,8 @@ export default function PatientProfile() {
             <div>
               <h1 className="text-2xl font-bold text-on-surface">{patient.full_name}</h1>
               <p className="text-sm text-on-surface-variant mt-1">
-                DOB: {fmtDate(patient.dob)} ({calcAge(patient.dob)}y) • {patient.gender}
-                {patient.national_id ? ` • ID ${patient.national_id}` : ''}
+                {t('patientProfile.dob')}: {fmtDate(patient.dob)} ({ageText}) • {genderLabel}
+                {patient.national_id ? ` • ${t('newPatient.nationalId')} ${patient.national_id}` : ''}
               </p>
             </div>
           </div>
@@ -179,7 +183,7 @@ export default function PatientProfile() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 text-sm">
             <div>
               <p className="text-xs font-semibold text-outline uppercase tracking-wider mb-1">
-                Blood Type
+                {t('patientProfile.bloodType')}
               </p>
               <p className="font-semibold text-on-surface uppercase">
                 {patient.blood_type === 'unknown' ? '—' : patient.blood_type || '—'}
@@ -187,27 +191,33 @@ export default function PatientProfile() {
             </div>
             <div>
               <p className="text-xs font-semibold text-outline uppercase tracking-wider mb-1">
-                Phone
+                {t('patientProfile.phone')}
               </p>
               <p className="font-semibold text-on-surface">{patient.phone || '—'}</p>
             </div>
             <div>
               <p className="text-xs font-semibold text-outline uppercase tracking-wider mb-1">
-                Latest ASA
+                {t('patientProfile.latestAsa')}
               </p>
               {latestAsa ? (
                 <StatusBadge variant={asaVariant(latestAsa)} label={`ASA ${latestAsa}`} />
               ) : (
-                <p className="font-semibold text-on-surface-variant">Not assessed</p>
+                <p className="font-semibold text-on-surface-variant">
+                  {t('patientProfile.notAssessed')}
+                </p>
               )}
             </div>
             <div>
               <p className="text-xs font-semibold text-outline uppercase tracking-wider mb-1">
-                Assigned Doctor
+                {t('patientProfile.assignedDoctor')}
               </p>
               <p className="font-semibold text-on-surface">
-                {patient.assigned_doctor_name || (
-                  <span className="text-on-surface-variant font-normal">Unassigned</span>
+                {patient.assigned_doctor_name ? (
+                  dr(patient.assigned_doctor_name)
+                ) : (
+                  <span className="text-on-surface-variant font-normal">
+                    {t('patientProfile.unassigned')}
+                  </span>
                 )}
               </p>
             </div>
@@ -216,33 +226,37 @@ export default function PatientProfile() {
       </div>
 
       <div className="flex gap-1 border-b border-outline-variant overflow-x-auto custom-scrollbar">
-        {tabs.map((t) => (
+        {tabIds.map((id) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={id}
+            onClick={() => setTab(id)}
             className={`px-4 py-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${
-              tab === t.id
+              tab === id
                 ? 'border-secondary text-secondary'
                 : 'border-transparent text-on-surface-variant hover:text-on-surface'
             }`}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-              {t.icon}
+              {TAB_ICONS[id]}
             </span>
-            {t.label}
+            {t(`patientProfile.tab.${id}`)}
           </button>
         ))}
-        <div className="ml-auto flex items-center pr-2">
+        <div className="ms-auto flex items-center pe-2">
           {canSeeClinical && (
             <button
               onClick={startAssessment}
               disabled={creating}
               className="my-2 px-4 py-2 bg-secondary text-on-secondary rounded-lg font-semibold text-sm hover:opacity-90 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60"
             >
-              {creating ? <Spinner size={16} /> : (
-                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add_notes</span>
+              {creating ? (
+                <Spinner size={16} />
+              ) : (
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                  add_notes
+                </span>
               )}
-              New Assessment
+              {t('patientProfile.newAssessment')}
             </button>
           )}
         </div>
@@ -252,27 +266,29 @@ export default function PatientProfile() {
         <section className="bg-surface-container-lowest rounded-xl border border-outline-variant p-6">
           <h3 className="text-base font-semibold text-on-surface mb-4 flex items-center gap-2">
             <span className="material-symbols-outlined text-secondary">assignment_ind</span>
-            Assign Doctor
+            {t('patientProfile.assignDoctor.title')}
           </h3>
           <p className="text-sm text-on-surface-variant mb-4">
             {patient.assigned_doctor_name
-              ? `Currently assigned to ${patient.assigned_doctor_name}.`
-              : 'No anaesthetist assigned yet.'}
+              ? t('patientProfile.assignDoctor.currentlyAssigned', {
+                  name: dr(patient.assigned_doctor_name),
+                })
+              : t('patientProfile.assignDoctor.noneYet')}
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[220px]">
               <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-                Anaesthetist
+                {t('patientProfile.assignDoctor.anaesthetist')}
               </label>
               <select
                 value={doctorId}
                 onChange={(e) => setDoctorId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
+                className="w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
               >
-                <option value="">Select an anaesthetist…</option>
+                <option value="">{t('patientProfile.assignDoctor.selectPlaceholder')}</option>
                 {doctors.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.name}
+                    {dr(d.name)}
                   </option>
                 ))}
               </select>
@@ -286,10 +302,14 @@ export default function PatientProfile() {
               }
               className="px-5 py-2.5 bg-secondary text-on-secondary rounded-lg font-semibold text-sm hover:opacity-90 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60"
             >
-              {savingDoctor ? <Spinner size={16} /> : (
-                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>save</span>
+              {savingDoctor ? (
+                <Spinner size={16} />
+              ) : (
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                  save
+                </span>
               )}
-              Save
+              {t('common.save')}
             </button>
             {doctorMsg && (
               <span className="text-xs text-on-secondary-container bg-secondary-container px-3 py-1 rounded-full">
@@ -303,36 +323,52 @@ export default function PatientProfile() {
       {tab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-surface-container-lowest rounded-xl border border-outline-variant p-6">
-            <h3 className="text-base font-semibold text-on-surface mb-4">Contact & Address</h3>
+            <h3 className="text-base font-semibold text-on-surface mb-4">
+              {t('patientProfile.contactAndAddress')}
+            </h3>
             <dl className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
-                <dt className="text-xs text-outline uppercase font-semibold mb-1">Email</dt>
+                <dt className="text-xs text-outline uppercase font-semibold mb-1">
+                  {t('common.email')}
+                </dt>
                 <dd className="text-on-surface">{patient.email || '—'}</dd>
               </div>
               <div>
-                <dt className="text-xs text-outline uppercase font-semibold mb-1">Phone</dt>
+                <dt className="text-xs text-outline uppercase font-semibold mb-1">
+                  {t('patientProfile.phone')}
+                </dt>
                 <dd className="text-on-surface">{patient.phone || '—'}</dd>
               </div>
               <div className="md:col-span-2">
-                <dt className="text-xs text-outline uppercase font-semibold mb-1">Address</dt>
+                <dt className="text-xs text-outline uppercase font-semibold mb-1">
+                  {t('patientProfile.address')}
+                </dt>
                 <dd className="text-on-surface whitespace-pre-line">{patient.address || '—'}</dd>
               </div>
             </dl>
           </div>
 
           <div className="bg-surface-container-lowest rounded-xl border border-outline-variant p-6">
-            <h3 className="text-base font-semibold text-on-surface mb-4">Emergency Contact</h3>
+            <h3 className="text-base font-semibold text-on-surface mb-4">
+              {t('patientProfile.emergencyContact')}
+            </h3>
             <dl className="space-y-3 text-sm">
               <div>
-                <dt className="text-xs text-outline uppercase font-semibold mb-1">Name</dt>
+                <dt className="text-xs text-outline uppercase font-semibold mb-1">
+                  {t('common.name')}
+                </dt>
                 <dd className="text-on-surface">{patient.emergency_contact_name || '—'}</dd>
               </div>
               <div>
-                <dt className="text-xs text-outline uppercase font-semibold mb-1">Phone</dt>
+                <dt className="text-xs text-outline uppercase font-semibold mb-1">
+                  {t('patientProfile.phone')}
+                </dt>
                 <dd className="text-on-surface">{patient.emergency_contact_phone || '—'}</dd>
               </div>
               <div>
-                <dt className="text-xs text-outline uppercase font-semibold mb-1">Relation</dt>
+                <dt className="text-xs text-outline uppercase font-semibold mb-1">
+                  {t('patientProfile.relation')}
+                </dt>
                 <dd className="text-on-surface">{patient.emergency_contact_relation || '—'}</dd>
               </div>
             </dl>
@@ -343,7 +379,7 @@ export default function PatientProfile() {
       {tab === 'assessments' && (
         <ListCard
           items={assessments}
-          empty="No assessments recorded."
+          empty={t('patientProfile.noAssessments')}
           render={(a) => (
             <li
               key={a.id}
@@ -352,12 +388,16 @@ export default function PatientProfile() {
             >
               <div>
                 <p className="font-semibold text-on-surface">
-                  Assessment #{a.id}
-                  {a.asa_classification ? ` • ASA ${a.asa_classification}` : ''}
+                  {t('patientProfile.assessmentNumber', { id: a.id })}
+                  {a.asa_classification
+                    ? ` • ${t('patientProfile.asaSuffix', { classification: a.asa_classification })}`
+                    : ''}
                 </p>
                 <p className="text-xs text-on-surface-variant">
-                  Created {fmtDate(a.created_at)}
-                  {a.submitted_at ? ` • Submitted ${fmtDate(a.submitted_at)}` : ''}
+                  {t('patientProfile.createdDate', { date: fmtDate(a.created_at) })}
+                  {a.submitted_at
+                    ? ` • ${t('patientProfile.submittedDate', { date: fmtDate(a.submitted_at) })}`
+                    : ''}
                 </p>
               </div>
               <StatusBadge status={a.status} />
@@ -369,14 +409,16 @@ export default function PatientProfile() {
       {tab === 'appointments' && (
         <ListCard
           items={appointments}
-          empty="No appointments scheduled."
+          empty={t('patientProfile.noAppointments')}
           render={(a) => (
             <li key={a.id} className="px-6 py-4 flex items-center justify-between">
               <div>
-                <p className="font-semibold text-on-surface">{a.surgery_type || 'Procedure TBD'}</p>
+                <p className="font-semibold text-on-surface">
+                  {a.surgery_type || t('patientProfile.procedureTbd')}
+                </p>
                 <p className="text-xs text-on-surface-variant">
                   {fmtDate(a.scheduled_date)} • {a.scheduled_time?.slice(0, 5)}
-                  {a.doctor_name ? ` • ${a.doctor_name}` : ''}
+                  {a.doctor_name ? ` • ${dr(a.doctor_name)}` : ''}
                 </p>
               </div>
               <StatusBadge status={a.status} />
@@ -388,24 +430,29 @@ export default function PatientProfile() {
       {tab === 'clearances' && (
         <ListCard
           items={clearances}
-          empty="No clearance decisions yet."
+          empty={t('patientProfile.noClearances')}
           render={(c) => (
             <li key={c.id} className="px-6 py-4 flex items-start justify-between gap-4">
               <div className="flex-1">
-                <p className="font-semibold text-on-surface capitalize">
-                  {c.decision.replace('_', ' ')}
+                <p className="font-semibold text-on-surface">
+                  {t(`status.${c.decision}`)}
                 </p>
                 <p className="text-xs text-on-surface-variant mt-0.5">
-                  Decided by {c.decided_by_name || 'Unknown'} on {fmtDate(c.decided_at)}
+                  {t('patientProfile.decidedBy', {
+                    name: c.decided_by_name ? dr(c.decided_by_name) : t('common.unknown'),
+                    date: fmtDate(c.decided_at),
+                  })}
                 </p>
                 {c.conditions && (
                   <p className="text-sm text-on-surface-variant mt-2">
-                    <span className="font-semibold">Conditions:</span> {c.conditions}
+                    <span className="font-semibold">{t('patientProfile.conditionsLabel')}:</span>{' '}
+                    {c.conditions}
                   </p>
                 )}
                 {c.reason && (
                   <p className="text-sm text-on-surface-variant mt-1">
-                    <span className="font-semibold">Reason:</span> {c.reason}
+                    <span className="font-semibold">{t('patientProfile.reasonLabel')}:</span>{' '}
+                    {c.reason}
                   </p>
                 )}
               </div>

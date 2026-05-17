@@ -6,10 +6,10 @@ import StatCard from '../components/StatCard'
 import StatusBadge, { asaVariant } from '../components/StatusBadge'
 import Spinner from '../components/Spinner'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 
 function formatTime(t) {
   if (!t) return '—'
-  // backend returns HH:MM:SS
   const [h, m] = t.split(':')
   const hh = parseInt(h, 10)
   const period = hh >= 12 ? 'PM' : 'AM'
@@ -17,17 +17,9 @@ function formatTime(t) {
   return `${display}:${m} ${period}`
 }
 
-function todayDateLabel() {
-  return new Date().toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
 export default function Dashboard() {
   const { user, hasRole } = useAuth()
+  const { t, lang, dr, formatName } = useLanguage()
   const navigate = useNavigate()
   const [appointments, setAppointments] = useState([])
   const [pending, setPending] = useState([])
@@ -41,15 +33,13 @@ export default function Dashboard() {
       setError('')
       try {
         const promises = [getTodayAppointments()]
-        if (hasRole('anaesthetist')) {
-          promises.push(listPendingAssessments())
-        }
+        if (hasRole('anaesthetist')) promises.push(listPendingAssessments())
         const results = await Promise.all(promises)
         if (cancelled) return
         setAppointments(results[0].appointments || [])
         if (results[1]) setPending(results[1].assessments || [])
       } catch (e) {
-        if (!cancelled) setError(e.response?.data?.error || 'Failed to load dashboard')
+        if (!cancelled) setError(e.response?.data?.error || t('common.failedLoad'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -58,58 +48,71 @@ export default function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [hasRole])
+  }, [hasRole, t])
 
   const total = appointments.length
   const completed = appointments.filter((a) => a.status === 'completed').length
   const cancelled = appointments.filter((a) => a.status === 'cancelled' || a.status === 'no_show').length
   const scheduled = appointments.filter((a) => a.status === 'scheduled' || a.status === 'in_progress').length
 
+  const localeTag = lang === 'ku' ? 'ku' : undefined
+  const todayLabel = new Date().toLocaleDateString(localeTag, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+
+  const firstName = user?.name?.split(' ')[0]
+  // Doctors get "Dr." prefix in the welcome line too.
+  const welcomeName = firstName ? formatName(firstName, user?.role) : ''
+  const welcomeText = welcomeName
+    ? t('dashboard.welcomeNamed', { name: welcomeName })
+    : t('dashboard.welcome')
+
   return (
     <div className="space-y-8">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-on-surface tracking-tight">
-            Welcome{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
-          </h1>
-          <p className="text-sm text-on-surface-variant mt-1">{todayDateLabel()}</p>
+          <h1 className="text-3xl font-bold text-on-surface tracking-tight">{welcomeText}</h1>
+          <p className="text-sm text-on-surface-variant mt-1">{todayLabel}</p>
         </div>
       </div>
 
       <section>
-        <h2 className="text-xl font-semibold text-on-surface mb-4">Day at a Glance</h2>
+        <h2 className="text-xl font-semibold text-on-surface mb-4">{t('dashboard.dayAtAGlance')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatCard
-            label="Today's Appointments"
+            label={t('dashboard.todaysAppointments')}
             value={total}
             icon="event"
-            suffix={`${scheduled} active`}
+            suffix={t('dashboard.activeSuffix', { count: scheduled })}
           />
           <StatCard
-            label="Pending Assessments"
+            label={t('dashboard.pendingAssessments')}
             value={pending.length}
             icon="hourglass_empty"
             iconColor="text-warning"
-            footer="Awaiting clearance review"
+            footer={t('dashboard.pendingFooter')}
           />
           <StatCard
-            label="Completed Today"
+            label={t('dashboard.completedToday')}
             value={completed}
             icon="check_circle"
             iconColor="text-success"
-            suffix={cancelled ? `${cancelled} cancelled` : undefined}
+            suffix={cancelled ? t('dashboard.cancelledSuffix', { count: cancelled }) : undefined}
           />
         </div>
       </section>
 
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-on-surface">Today's Schedule</h2>
+          <h2 className="text-xl font-semibold text-on-surface">{t('dashboard.todaysSchedule')}</h2>
           <button
             onClick={() => navigate('/appointments')}
             className="text-sm text-secondary font-semibold hover:underline"
           >
-            View full schedule →
+            {t('dashboard.viewFullSchedule')}
           </button>
         </div>
 
@@ -125,18 +128,18 @@ export default function Dashboard() {
               <span className="material-symbols-outlined text-outline-variant" style={{ fontSize: 48 }}>
                 event_busy
               </span>
-              <p className="text-on-surface-variant mt-2">No appointments scheduled for today.</p>
+              <p className="text-on-surface-variant mt-2">{t('dashboard.noAppointments')}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
+              <table className="w-full text-start">
                 <thead className="bg-surface-container-low border-b border-outline-variant">
                   <tr className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
-                    <th className="px-6 py-4">Time</th>
-                    <th className="px-6 py-4">Patient</th>
-                    <th className="px-6 py-4">Surgery</th>
-                    <th className="px-6 py-4">Anaesthetist</th>
-                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4 text-start">{t('dashboard.time')}</th>
+                    <th className="px-6 py-4 text-start">{t('dashboard.patient')}</th>
+                    <th className="px-6 py-4 text-start">{t('dashboard.surgery')}</th>
+                    <th className="px-6 py-4 text-start">{t('dashboard.anaesthetist')}</th>
+                    <th className="px-6 py-4 text-start">{t('common.status')}</th>
                     <th className="px-6 py-4"></th>
                   </tr>
                 </thead>
@@ -152,14 +155,18 @@ export default function Dashboard() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="font-semibold text-on-surface">{a.patient_name || '—'}</p>
-                        <p className="text-xs text-on-surface-variant">ID: {a.national_id || '—'}</p>
+                        <p className="text-xs text-on-surface-variant">
+                          {t('newPatient.nationalId')}: {a.national_id || '—'}
+                        </p>
                       </td>
                       <td className="px-6 py-4 text-on-surface">{a.surgery_type || '—'}</td>
-                      <td className="px-6 py-4 text-on-surface-variant">{a.doctor_name || '—'}</td>
+                      <td className="px-6 py-4 text-on-surface-variant">
+                        {a.doctor_name ? dr(a.doctor_name) : '—'}
+                      </td>
                       <td className="px-6 py-4">
                         <StatusBadge status={a.status} />
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-end">
                         <span className="material-symbols-outlined text-outline-variant group-hover:text-secondary">
                           chevron_right
                         </span>
@@ -176,14 +183,14 @@ export default function Dashboard() {
       {hasRole('anaesthetist') && (
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-on-surface">Pending Assessments</h2>
-            <span className="text-sm text-on-surface-variant">{pending.length} submitted</span>
+            <h2 className="text-xl font-semibold text-on-surface">{t('dashboard.pendingTitle')}</h2>
+            <span className="text-sm text-on-surface-variant">
+              {t('dashboard.submittedCount', { count: pending.length })}
+            </span>
           </div>
           <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm overflow-hidden">
             {pending.length === 0 ? (
-              <div className="p-8 text-center text-on-surface-variant">
-                No assessments awaiting review.
-              </div>
+              <div className="p-8 text-center text-on-surface-variant">{t('dashboard.noPending')}</div>
             ) : (
               <ul className="divide-y divide-outline-variant">
                 {pending.map((a) => (
@@ -199,8 +206,10 @@ export default function Dashboard() {
                       <div>
                         <p className="font-semibold text-on-surface">{a.patient_name}</p>
                         <p className="text-xs text-on-surface-variant">
-                          {a.surgery_type || 'Procedure TBD'}
-                          {a.scheduled_date ? ` • ${new Date(a.scheduled_date).toLocaleDateString()}` : ''}
+                          {a.surgery_type || t('dashboard.procedureTbd')}
+                          {a.scheduled_date
+                            ? ` • ${new Date(a.scheduled_date).toLocaleDateString(localeTag)}`
+                            : ''}
                         </p>
                       </div>
                     </div>

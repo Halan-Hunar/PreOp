@@ -1,3 +1,5 @@
+import { useLanguage } from '../context/LanguageContext'
+
 const STYLES = {
   // Clearance
   cleared: { bg: 'bg-success-container', text: 'text-on-success-container', icon: 'check_circle' },
@@ -24,9 +26,11 @@ const STYLES = {
 }
 
 export default function StatusBadge({ status, label, variant }) {
+  const { t } = useLanguage()
   const key = variant || status
   const cfg = STYLES[key] || STYLES.draft
-  const text = label || (status ? status.replace(/_/g, ' ') : '—')
+  // Prefer explicit label, then translated status, then a fallback.
+  const text = label || (status ? t(`status.${status}`) : t('common.notAvailable'))
 
   return (
     <span

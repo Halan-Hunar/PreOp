@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { listAppointments } from '../api/appointments'
 import Spinner from '../components/Spinner'
 import StatusBadge from '../components/StatusBadge'
+import { useLanguage } from '../context/LanguageContext'
 
 function toIsoDate(d) {
   const yyyy = d.getFullYear()
@@ -19,7 +20,7 @@ function addDays(d, n) {
 
 function startOfWeek(d) {
   const c = new Date(d)
-  const day = c.getDay() // 0=Sun
+  const day = c.getDay()
   c.setDate(c.getDate() - day)
   return c
 }
@@ -33,20 +34,21 @@ function fmtTime(t) {
   return `${display}:${m} ${period}`
 }
 
-const HOURS = Array.from({ length: 11 }, (_, i) => 7 + i) // 7am - 5pm
+const HOURS = Array.from({ length: 11 }, (_, i) => 7 + i)
 
 export default function AppointmentCalendar() {
   const navigate = useNavigate()
-  const [view, setView] = useState('day') // day | week
+  const { t, lang, dr } = useLanguage()
+  const localeTag = lang === 'ku' ? 'ku' : undefined
+
+  const [view, setView] = useState('day')
   const [anchor, setAnchor] = useState(new Date())
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const range = useMemo(() => {
-    if (view === 'day') {
-      return [anchor]
-    }
+    if (view === 'day') return [anchor]
     const start = startOfWeek(anchor)
     return Array.from({ length: 7 }, (_, i) => addDays(start, i))
   }, [view, anchor])
@@ -61,14 +63,13 @@ export default function AppointmentCalendar() {
           const r = await listAppointments({ date: toIsoDate(anchor), limit: 100 })
           if (!cancelled) setItems(r.appointments || [])
         } else {
-          // fetch each day
           const all = await Promise.all(
             range.map((d) => listAppointments({ date: toIsoDate(d), limit: 100 }))
           )
           if (!cancelled) setItems(all.flatMap((r) => r.appointments || []))
         }
       } catch (e) {
-        if (!cancelled) setError(e.response?.data?.error || 'Failed to load schedule')
+        if (!cancelled) setError(e.response?.data?.error || t('common.failedLoad'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -96,16 +97,29 @@ export default function AppointmentCalendar() {
     setAnchor((a) => addDays(a, view === 'day' ? n : n * 7))
   }
 
+  const dateLabel =
+    view === 'day'
+      ? anchor.toLocaleDateString(localeTag, {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        })
+      : t('calendar.weekOf', {
+          date: startOfWeek(anchor).toLocaleDateString(localeTag, {
+            month: 'short',
+            day: 'numeric',
+          }),
+        })
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-on-surface tracking-tight">Surgical Schedule</h1>
-          <p className="text-sm text-on-surface-variant mt-1">
-            {view === 'day'
-              ? anchor.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-              : `Week of ${startOfWeek(anchor).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
-          </p>
+          <h1 className="text-3xl font-bold text-on-surface tracking-tight">
+            {t('calendar.title')}
+          </h1>
+          <p className="text-sm text-on-surface-variant mt-1">{dateLabel}</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -116,7 +130,7 @@ export default function AppointmentCalendar() {
                 view === 'day' ? 'bg-surface text-secondary shadow-sm' : 'text-on-surface-variant'
               }`}
             >
-              Day
+              {t('calendar.day')}
             </button>
             <button
               onClick={() => setView('week')}
@@ -124,7 +138,7 @@ export default function AppointmentCalendar() {
                 view === 'week' ? 'bg-surface text-secondary shadow-sm' : 'text-on-surface-variant'
               }`}
             >
-              Week
+              {t('calendar.week')}
             </button>
           </div>
 
@@ -132,7 +146,7 @@ export default function AppointmentCalendar() {
             <button
               onClick={() => shift(-1)}
               className="p-1.5 hover:bg-surface-container-high rounded-md transition-colors"
-              aria-label="Previous"
+              aria-label={t('calendar.previous')}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
                 chevron_left
@@ -142,12 +156,12 @@ export default function AppointmentCalendar() {
               onClick={() => setAnchor(new Date())}
               className="px-3 py-1 text-xs font-semibold text-on-surface-variant hover:text-secondary"
             >
-              Today
+              {t('calendar.today')}
             </button>
             <button
               onClick={() => shift(1)}
               className="p-1.5 hover:bg-surface-container-high rounded-md transition-colors"
-              aria-label="Next"
+              aria-label={t('calendar.next')}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
                 chevron_right
@@ -176,13 +190,13 @@ export default function AppointmentCalendar() {
               {range.map((d) => (
                 <div
                   key={d.toISOString()}
-                  className="h-12 bg-surface-container-low border-b border-l border-outline-variant flex flex-col items-center justify-center"
+                  className="h-12 bg-surface-container-low border-b border-s border-outline-variant flex flex-col items-center justify-center"
                 >
                   <p className="text-xs uppercase tracking-wider text-on-surface-variant font-semibold">
-                    {d.toLocaleDateString(undefined, { weekday: 'short' })}
+                    {d.toLocaleDateString(localeTag, { weekday: 'short' })}
                   </p>
                   <p className="text-sm font-semibold text-on-surface">
-                    {d.getDate()} {d.toLocaleDateString(undefined, { month: 'short' })}
+                    {d.getDate()} {d.toLocaleDateString(localeTag, { month: 'short' })}
                   </p>
                 </div>
               ))}
@@ -193,6 +207,7 @@ export default function AppointmentCalendar() {
                   hour={hour}
                   range={range}
                   byDateHour={byDateHour}
+                  formatDoctor={dr}
                   onClick={(a) => navigate(`/patients/${a.patient_id}`)}
                 />
               ))}
@@ -204,11 +219,11 @@ export default function AppointmentCalendar() {
   )
 }
 
-function Row({ hour, range, byDateHour, onClick }) {
+function Row({ hour, range, byDateHour, onClick, formatDoctor }) {
   const label = `${((hour + 11) % 12) + 1}:00 ${hour >= 12 ? 'PM' : 'AM'}`
   return (
     <>
-      <div className="border-t border-outline-variant py-3 pr-3 text-right text-xs font-semibold text-outline tabular-nums">
+      <div className="border-t border-outline-variant py-3 pe-3 text-end text-xs font-semibold text-outline tabular-nums">
         {label}
       </div>
       {range.map((d) => {
@@ -216,13 +231,13 @@ function Row({ hour, range, byDateHour, onClick }) {
         return (
           <div
             key={`${d.toISOString()}-${hour}`}
-            className="border-t border-l border-outline-variant p-2 min-h-[80px] space-y-2"
+            className="border-t border-s border-outline-variant p-2 min-h-[80px] space-y-2"
           >
             {items.map((a) => (
               <button
                 key={a.id}
                 onClick={() => onClick(a)}
-                className="w-full text-left bg-secondary-container/40 hover:bg-secondary-container border border-secondary/20 rounded-lg p-2 transition-colors"
+                className="w-full text-start bg-secondary-container/40 hover:bg-secondary-container border border-secondary/20 rounded-lg p-2 transition-colors"
               >
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <span className="text-xs font-bold text-on-surface tabular-nums">
@@ -231,13 +246,15 @@ function Row({ hour, range, byDateHour, onClick }) {
                   <StatusBadge status={a.status} />
                 </div>
                 <p className="text-sm font-semibold text-on-surface truncate">
-                  {a.patient_name || 'Unknown'}
+                  {a.patient_name || '—'}
                 </p>
                 <p className="text-xs text-on-surface-variant truncate">
-                  {a.surgery_type || 'Procedure TBD'}
+                  {a.surgery_type || '—'}
                 </p>
                 {a.doctor_name && (
-                  <p className="text-[11px] text-outline mt-1 truncate">{a.doctor_name}</p>
+                  <p className="text-[11px] text-outline mt-1 truncate">
+                    {formatDoctor(a.doctor_name)}
+                  </p>
                 )}
               </button>
             ))}

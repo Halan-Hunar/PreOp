@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { listPatients } from '../api/patients'
 import { listAppointments } from '../api/appointments'
 import { listAssessments } from '../api/assessments'
 import { getAttendance, getAttendanceSummary } from '../api/attendance'
 import StatCard from '../components/StatCard'
 import Spinner from '../components/Spinner'
+import ExportMenu from '../components/ExportMenu'
+import {
+  exportSheetsAsExcel,
+  exportSheetsAsPdf,
+  exportNodeAsImage,
+  printNode,
+} from '../utils/exportHelpers'
+import { useLanguage } from '../context/LanguageContext'
 
-const MONTHS = [
+const MONTH_KEYS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
@@ -19,7 +24,6 @@ function pad(n) {
 }
 
 function monthRange(year, month) {
-  // month is 1-indexed
   const start = `${year}-${pad(month)}-01`
   const lastDay = new Date(year, month, 0).getDate()
   const end = `${year}-${pad(month)}-${pad(lastDay)}`
@@ -39,7 +43,6 @@ function fmtHoursFromSeconds(seconds) {
   return `${h}h ${m}m`
 }
 
-// "HH:MM:SS" -> total seconds
 function hmsToSeconds(hms) {
   if (!hms) return 0
   const [h, m, s] = hms.split(':').map((p) => parseInt(p, 10) || 0)
@@ -47,11 +50,13 @@ function hmsToSeconds(hms) {
 }
 
 export default function Reports() {
+  const { t, lang, formatName } = useLanguage()
+  const reportRef = useRef(null)
+  const localeTag = lang === 'ku' ? 'ku' : undefined
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [loading, setLoading] = useState(true)
-  const [exporting, setExporting] = useState('')
   const [error, setError] = useState('')
   const [data, setData] = useState({
     patients: [],
@@ -66,27 +71,24 @@ export default function Reports() {
     async function load() {
       setLoading(true)
       setError('')
-      try {
-        const [pat, app, ass, att, sum] = await Promise.all([
-          listPatients({ limit: 500 }),
-          listAppointments({ limit: 500 }),
-          listAssessments({ limit: 500 }),
-          getAttendance({ month, year }).catch(() => ({ records: [] })),
-          getAttendanceSummary({ month, year }).catch(() => ({ summary: [] })),
-        ])
-        if (cancelled) return
-        setData({
-          patients: pat.patients || [],
-          appointments: app.appointments || [],
-          assessments: ass.assessments || [],
-          attendance: att.records || [],
-          summary: sum.summary || [],
-        })
-      } catch (e) {
-        if (!cancelled) setError(e.response?.data?.error || 'Failed to load report data')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
+
+      const [pat, app, ass, att, sum] = await Promise.all([
+        listPatients({ limit: 500 }).catch(() => ({ patients: [] })),
+        listAppointments({ limit: 500 }).catch(() => ({ appointments: [] })),
+        listAssessments({ limit: 500 }).catch(() => ({ assessments: [] })),
+        getAttendance({ month, year }).catch(() => ({ records: [] })),
+        getAttendanceSummary({ month, year }).catch(() => ({ summary: [] })),
+      ])
+
+      if (cancelled) return
+      setData({
+        patients: pat.patients || [],
+        appointments: app.appointments || [],
+        assessments: ass.assessments || [],
+        attendance: att.records || [],
+        summary: sum.summary || [],
+      })
+      setLoading(false)
     }
     load()
     return () => {
@@ -94,15 +96,19 @@ export default function Reports() {
     }
   }, [month, year])
 
-  const rangeLabel = `${MONTHS[month - 1]} ${year}`
+  const monthName = useMemo(
+    () =>
+      new Date(year, month - 1, 1).toLocaleDateString(localeTag, {
+        month: 'long',
+        year: 'numeric',
+      }) || `${MONTH_KEYS[month - 1]} ${year}`,
+    [month, year, localeTag]
+  )
+  const rangeLabel = monthName
 
   const stats = useMemo(() => {
-    const monthAppts = data.appointments.filter((a) =>
-      inMonth(a.scheduled_date, year, month)
-    )
-    const monthAssess = data.assessments.filter((a) =>
-      inMonth(a.created_at, year, month)
-    )
+    const monthAppts = data.appointments.filter((a) => inMonth(a.scheduled_date, year, month))
+    const monthAssess = data.assessments.filter((a) => inMonth(a.created_at, year, month))
 
     const asaCounts = monthAssess.reduce((acc, a) => {
       const k = a.asa_classification || 'Unknown'
@@ -121,225 +127,121 @@ export default function Reports() {
     }
   }, [data, month, year])
 
-  // --- Sheet row builders (shared by Excel + PDF) ---------------------------
-
+  // Row builders — column headers reuse translated labels.
   const patientRows = () =>
     data.patients.map((p) => ({
       ID: p.id,
-      Name: p.full_name,
-      DOB: p.dob ? String(p.dob).slice(0, 10) : '',
-      Gender: p.gender,
-      'Blood Type': p.blood_type,
-      'National ID': p.national_id || '',
-      Phone: p.phone || '',
-      Email: p.email || '',
-      Registered: p.created_at ? String(p.created_at).slice(0, 10) : '',
+      [t('common.name')]: p.full_name,
+      [t('newPatient.dob')]: p.dob ? String(p.dob).slice(0, 10) : '',
+      [t('newPatient.gender')]: p.gender ? t(`gender.${p.gender}`) : '',
+      [t('newPatient.bloodType')]: p.blood_type,
+      [t('newPatient.nationalId')]: p.national_id || '',
+      [t('newPatient.phone')]: p.phone || '',
+      [t('common.email')]: p.email || '',
+      [t('patientList.headerRegistered')]: p.created_at ? String(p.created_at).slice(0, 10) : '',
     }))
 
   const appointmentRows = () =>
     stats.monthAppts.map((a) => ({
       ID: a.id,
-      Date: String(a.scheduled_date || '').slice(0, 10),
-      Time: (a.scheduled_time || '').slice(0, 5),
-      Patient: a.patient_name || '',
-      'National ID': a.national_id || '',
-      Procedure: a.surgery_type || '',
-      Anaesthetist: a.doctor_name || '',
-      Status: a.status,
+      [t('attendance.date')]: String(a.scheduled_date || '').slice(0, 10),
+      [t('dashboard.time')]: (a.scheduled_time || '').slice(0, 5),
+      [t('dashboard.patient')]: a.patient_name || '',
+      [t('newPatient.nationalId')]: a.national_id || '',
+      [t('dashboard.surgery')]: a.surgery_type || '',
+      [t('dashboard.anaesthetist')]: a.doctor_name ? formatName(a.doctor_name, 'anaesthetist') : '',
+      [t('common.status')]: a.status,
     }))
 
   const assessmentRows = () =>
     stats.monthAssess.map((a) => ({
       ID: a.id,
-      Patient: a.patient_name || '',
+      [t('dashboard.patient')]: a.patient_name || '',
       ASA: a.asa_classification || '',
-      Plan: a.anaesthetic_plan || '',
-      Status: a.status,
+      [t('clearance.summary.plan')]: a.anaesthetic_plan || '',
+      [t('common.status')]: a.status,
       Created: a.created_at ? String(a.created_at).slice(0, 10) : '',
       Submitted: a.submitted_at ? String(a.submitted_at).slice(0, 10) : '',
     }))
 
   const attendanceRows = () =>
     data.summary.map((s) => ({
-      Staff: s.staff_name || '',
-      Role: s.role,
-      'Days Present': s.days_present || 0,
-      'Total Hours': s.total_hours || '00:00:00',
-      'Avg Hours/Day': s.avg_hours_per_day
+      [t('reports.staff')]: formatName(s.staff_name, s.role),
+      [t('common.role')]: s.role,
+      [t('reports.daysPresent')]: s.days_present || 0,
+      [t('reports.totalHours')]: s.total_hours || '00:00:00',
+      [t('reports.avgPerDay')]: s.avg_hours_per_day
         ? Number(s.avg_hours_per_day).toFixed(2)
         : '0.00',
     }))
 
-  // --- Excel export --------------------------------------------------------
+  const sheets = () => [
+    { name: 'Patients', rows: patientRows() },
+    { name: 'Appointments', rows: appointmentRows() },
+    { name: 'Assessments', rows: assessmentRows() },
+    { name: 'Staff Attendance', rows: attendanceRows() },
+  ]
+  const baseName = `PreOp_Report_${year}-${pad(month)}`
 
-  const exportExcel = () => {
-    setExporting('excel')
-    try {
-      const wb = XLSX.utils.book_new()
-
-      const addSheet = (name, rows) => {
-        const sheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{}])
-        XLSX.utils.book_append_sheet(wb, sheet, name)
-      }
-
-      addSheet('Patients', patientRows())
-      addSheet('Appointments', appointmentRows())
-      addSheet('Assessments', assessmentRows())
-      addSheet('Staff Attendance', attendanceRows())
-
-      const filename = `PreOp_Report_${year}-${pad(month)}.xlsx`
-      XLSX.writeFile(wb, filename)
-    } finally {
-      setExporting('')
-    }
-  }
-
-  // --- PDF export ----------------------------------------------------------
-
-  const exportPdf = () => {
-    setExporting('pdf')
-    try {
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt' })
-      const pageWidth = doc.internal.pageSize.getWidth()
-      const pageHeight = doc.internal.pageSize.getHeight()
-      const marginX = 40
-      const headerY = 40
-      const bodyTop = 90 // y where the first section title sits
-
-      const drawHeader = () => {
-        doc.setFontSize(16)
-        doc.setTextColor(11, 28, 48)
-        doc.text('PreOp Clinical Suite', marginX, headerY)
-        doc.setFontSize(11)
-        doc.setTextColor(118, 119, 125)
-        doc.text(`Monthly Report — ${rangeLabel}`, marginX, headerY + 18)
-        const generated = `Generated ${new Date().toLocaleString()}`
-        doc.text(
-          generated,
-          pageWidth - marginX - doc.getTextWidth(generated),
-          headerY + 18
-        )
-      }
-
-      drawHeader()
-
-      let cursorY = bodyTop
-
-      const drawSection = (title, rows) => {
-        if (!rows.length) return
-
-        // If the title would crowd the page bottom, start a fresh page.
-        if (cursorY > pageHeight - 120) {
-          doc.addPage()
-          drawHeader()
-          cursorY = bodyTop
-        }
-
-        doc.setFontSize(14)
-        doc.setTextColor(11, 28, 48)
-        doc.text(title, marginX, cursorY)
-
-        const cols = Object.keys(rows[0])
-        const body = rows.map((r) => cols.map((c) => (r[c] ?? '').toString()))
-
-        autoTable(doc, {
-          head: [cols],
-          body,
-          startY: cursorY + 10,
-          margin: { left: marginX, right: marginX, bottom: 40 },
-          styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' },
-          headStyles: {
-            fillColor: [0, 106, 97], // secondary teal
-            textColor: 255,
-            fontStyle: 'bold',
-          },
-          alternateRowStyles: { fillColor: [239, 244, 255] },
-        })
-
-        cursorY = (doc.lastAutoTable?.finalY || cursorY + 20) + 30
-      }
-
-      drawSection('Patients', patientRows())
-      drawSection('Appointments', appointmentRows())
-      drawSection('Assessments', assessmentRows())
-      drawSection('Staff Attendance', attendanceRows())
-
-      // Page numbers — drawn last so they sit on top of every page footer.
-      const totalPages = doc.internal.getNumberOfPages()
-      for (let i = 1; i <= totalPages; i++) {
-        doc.setPage(i)
-        doc.setFontSize(9)
-        doc.setTextColor(118, 119, 125)
-        const label = `Page ${i} of ${totalPages}`
-        doc.text(label, pageWidth - marginX - doc.getTextWidth(label), pageHeight - 20)
-      }
-
-      doc.save(`PreOp_Report_${year}-${pad(month)}.pdf`)
-    } finally {
-      setExporting('')
-    }
-  }
+  const handleExportExcel = () => exportSheetsAsExcel(sheets(), `${baseName}.xlsx`)
+  const handleExportPdf = () =>
+    exportSheetsAsPdf(sheets(), {
+      title: 'PreOp Clinical Suite',
+      subtitle: `Monthly Report — ${MONTH_KEYS[month - 1]} ${year}`,
+      filename: `${baseName}.pdf`,
+    })
+  const handleExportImage = () => exportNodeAsImage(reportRef.current, `${baseName}.png`)
+  const handlePrint = () => printNode(reportRef.current)
 
   return (
     <div className="space-y-8">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold text-on-surface tracking-tight">
-            Monthly Report — {rangeLabel}
+            {t('reports.monthlyTitle', { label: rangeLabel })}
           </h1>
           <p className="text-sm text-on-surface-variant mt-1">
             {monthRange(year, month).start} → {monthRange(year, month).end}
           </p>
         </div>
 
-        <div className="flex items-end gap-3">
+        <div className="flex items-end gap-3 flex-wrap">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-              Month
+              {t('reports.month')}
             </label>
             <select
               value={month}
               onChange={(e) => setMonth(parseInt(e.target.value, 10))}
-              className="px-4 py-2.5 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
+              className="px-4 py-2.5 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
             >
-              {MONTHS.map((m, i) => (
+              {MONTH_KEYS.map((m, i) => (
                 <option key={m} value={i + 1}>
-                  {m}
+                  {new Date(2000, i, 1).toLocaleDateString(localeTag, { month: 'long' })}
                 </option>
               ))}
             </select>
           </div>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-              Year
+              {t('reports.year')}
             </label>
             <input
               type="number"
               value={year}
               onChange={(e) => setYear(parseInt(e.target.value, 10) || now.getFullYear())}
-              className="w-28 px-4 py-2.5 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
+              className="w-28 px-4 py-2.5 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
             />
           </div>
-          <button
-            onClick={exportExcel}
-            disabled={loading || exporting === 'excel'}
-            className="px-4 py-2.5 bg-surface-container-lowest border border-secondary text-secondary rounded-lg font-semibold text-sm hover:bg-secondary-container/40 transition-colors flex items-center gap-2 disabled:opacity-60"
-          >
-            {exporting === 'excel' ? <Spinner size={16} /> : (
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>table_view</span>
-            )}
-            Excel
-          </button>
-          <button
-            onClick={exportPdf}
-            disabled={loading || exporting === 'pdf'}
-            className="px-4 py-2.5 bg-secondary text-on-secondary rounded-lg font-semibold text-sm hover:opacity-90 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60"
-          >
-            {exporting === 'pdf' ? <Spinner size={16} /> : (
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>picture_as_pdf</span>
-            )}
-            PDF
-          </button>
+          <ExportMenu
+            disabled={loading}
+            options={[
+              { id: 'pdf', onClick: handleExportPdf },
+              { id: 'excel', onClick: handleExportExcel },
+              { id: 'image', onClick: handleExportImage },
+              { id: 'print', onClick: handlePrint },
+            ]}
+          />
         </div>
       </div>
 
@@ -350,28 +252,44 @@ export default function Reports() {
       ) : error ? (
         <div className="bg-error-container text-on-error-container p-6 rounded-xl">{error}</div>
       ) : (
-        <>
+        <div ref={reportRef} className="space-y-8">
           <section>
-            <h2 className="text-lg font-semibold text-on-surface mb-4">Volume</h2>
+            <h2 className="text-lg font-semibold text-on-surface mb-4">{t('reports.volume')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <StatCard label="Total Patients" value={stats.patients} icon="group" />
-              <StatCard label="Appointments" value={stats.monthAppts.length} icon="event" />
-              <StatCard label="Assessments" value={stats.monthAssess.length} icon="assignment" />
+              <StatCard label={t('reports.totalPatients')} value={stats.patients} icon="group" />
               <StatCard
-                label="Cleared"
+                label={t('reports.appointments')}
+                value={stats.monthAppts.length}
+                icon="event"
+              />
+              <StatCard
+                label={t('reports.assessments')}
+                value={stats.monthAssess.length}
+                icon="assignment"
+              />
+              <StatCard
+                label={t('reports.cleared')}
                 value={stats.cleared}
                 icon="check_circle"
                 iconColor="text-success"
-                suffix={stats.flagged ? `${stats.flagged} flagged` : undefined}
+                suffix={
+                  stats.flagged
+                    ? `${stats.flagged} ${t('reports.flagged').toLowerCase()}`
+                    : undefined
+                }
               />
             </div>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-on-surface mb-4">ASA Distribution</h2>
+            <h2 className="text-lg font-semibold text-on-surface mb-4">
+              {t('reports.asaDistribution')}
+            </h2>
             <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6">
               {stats.monthAssess.length === 0 ? (
-                <p className="text-on-surface-variant text-center">No assessments this month.</p>
+                <p className="text-on-surface-variant text-center">
+                  {t('reports.noAssessmentsMonth')}
+                </p>
               ) : (
                 <div className="space-y-3">
                   {['I', 'II', 'III', 'IV', 'V', 'VI'].map((k) => {
@@ -398,33 +316,45 @@ export default function Reports() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-on-surface mb-4">Staff Attendance</h2>
+            <h2 className="text-lg font-semibold text-on-surface mb-4">
+              {t('reports.staffAttendance')}
+            </h2>
             <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm overflow-hidden">
               {data.summary.length === 0 ? (
                 <div className="p-12 text-center text-on-surface-variant">
-                  No attendance data for this month.
+                  {t('reports.noAttendance')}
                 </div>
               ) : (
                 <table className="w-full text-sm">
                   <thead className="bg-surface-container-low border-b border-outline-variant text-xs uppercase tracking-wider text-on-surface-variant">
                     <tr>
-                      <th className="px-6 py-4 text-left font-semibold">Staff</th>
-                      <th className="px-6 py-4 text-left font-semibold">Role</th>
-                      <th className="px-6 py-4 text-right font-semibold">Days Present</th>
-                      <th className="px-6 py-4 text-right font-semibold">Total Hours</th>
-                      <th className="px-6 py-4 text-right font-semibold">Avg / Day</th>
+                      <th className="px-6 py-4 text-start font-semibold">{t('reports.staff')}</th>
+                      <th className="px-6 py-4 text-start font-semibold">{t('common.role')}</th>
+                      <th className="px-6 py-4 text-end font-semibold">
+                        {t('reports.daysPresent')}
+                      </th>
+                      <th className="px-6 py-4 text-end font-semibold">
+                        {t('reports.totalHours')}
+                      </th>
+                      <th className="px-6 py-4 text-end font-semibold">
+                        {t('reports.avgPerDay')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant">
                     {data.summary.map((s) => (
                       <tr key={s.user_id} className="hover:bg-surface-container-low transition-colors">
-                        <td className="px-6 py-4 font-semibold text-on-surface">{s.staff_name}</td>
-                        <td className="px-6 py-4 text-on-surface-variant capitalize">{s.role}</td>
-                        <td className="px-6 py-4 text-right tabular-nums">{s.days_present || 0}</td>
-                        <td className="px-6 py-4 text-right tabular-nums">
+                        <td className="px-6 py-4 font-semibold text-on-surface">
+                          {formatName(s.staff_name, s.role)}
+                        </td>
+                        <td className="px-6 py-4 text-on-surface-variant">
+                          {s.role ? t(`role.${s.role}`) : ''}
+                        </td>
+                        <td className="px-6 py-4 text-end tabular-nums">{s.days_present || 0}</td>
+                        <td className="px-6 py-4 text-end tabular-nums">
                           {fmtHoursFromSeconds(hmsToSeconds(s.total_hours))}
                         </td>
-                        <td className="px-6 py-4 text-right tabular-nums">
+                        <td className="px-6 py-4 text-end tabular-nums">
                           {s.avg_hours_per_day
                             ? `${Number(s.avg_hours_per_day).toFixed(2)}h`
                             : '—'}
@@ -436,7 +366,7 @@ export default function Reports() {
               )}
             </div>
           </section>
-        </>
+        </div>
       )}
     </div>
   )

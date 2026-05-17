@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function Modal({ open, onClose, title, children, footer, size = 'md' }) {
+  const { t } = useLanguage()
   useEffect(() => {
     if (!open) return
     const handler = (e) => e.key === 'Escape' && onClose?.()
@@ -32,7 +34,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
             <button
               onClick={onClose}
               className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container-high transition-colors"
-              aria-label="Close"
+              aria-label={t('common.close')}
             >
               <span className="material-symbols-outlined">close</span>
             </button>

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-background: #f8f9ff;
   --color-on-background: #0b1c30;
@@ -35,11 +37,51 @@
   --color-success-container: #dcfce7;
   --color-on-success-container: #166534;
 
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Inter", "Noto Sans Arabic", "Vazirmatn", system-ui, -apple-system, sans-serif;
 
   --radius-default: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+
+  /* Motion tokens — Apple ease-out standard for predictable, calm UI. */
+  --ease-standard: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dark {
+  --color-background: #0f1a19;
+  --color-on-background: #e0f2f1;
+
+  --color-surface: #1a2b2a;
+  --color-on-surface: #e0f2f1;
+  --color-on-surface-variant: #b2dfdb;
+
+  --color-surface-container-lowest: #111f1e;
+  --color-surface-container-low: #1a2b2a;
+  --color-surface-container: #1e2f2e;
+  --color-surface-container-high: #243332;
+  --color-surface-container-highest: #2e4442;
+
+  --color-secondary: #4db6ac;
+  --color-on-secondary: #003733;
+  --color-secondary-container: #00504a;
+  --color-on-secondary-container: #80cbc4;
+
+  --color-outline: #4a7a76;
+  --color-outline-variant: #3a5552;
+
+  --color-error: #ef9a9a;
+  --color-on-error: #4a0d0d;
+  --color-error-container: #5c1a1a;
+  --color-on-error-container: #ffb4ab;
+
+  --color-warning: #ffcc80;
+  --color-warning-container: #4a3318;
+  --color-on-warning-container: #ffd699;
+
+  --color-success: #80cbc4;
+  --color-success-container: #1a3d3a;
+  --color-on-success-container: #b2dfdb;
 }
 
 html,
@@ -50,11 +92,15 @@ body,
 
 body {
   margin: 0;
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: "Inter", "Noto Sans Arabic", "Vazirmatn", system-ui, sans-serif;
   background-color: var(--color-background);
   color: var(--color-on-background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html[lang="ku"] body {
+  font-family: "Noto Sans Arabic", "Vazirmatn", "Inter", system-ui, sans-serif;
 }
 
 .material-symbols-outlined {
@@ -70,6 +116,7 @@ body {
   word-wrap: normal;
   direction: ltr;
   -webkit-font-feature-settings: "liga";
+  font-feature-settings: "liga";
   -webkit-font-smoothing: antialiased;
   font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
   vertical-align: middle;
@@ -85,4 +132,231 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: var(--color-outline-variant);
   border-radius: 10px;
+}
+
+.tabular-nums,
+.font-mono {
+  unicode-bidi: plaintext;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  color-scheme: dark;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Animation system. All transforms/opacity only — no layout-affecting
+ * properties — so animations never trigger reflow.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dropdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-end {
+  from {
+    opacity: 0;
+    transform: translateX(120%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes shake-x {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes row-highlight {
+  0% {
+    background-color: color-mix(in srgb, var(--color-secondary) 18%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes section-expand {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Utility classes for the animations above. */
+.anim-pop-in {
+  animation: pop-in 300ms var(--ease-standard) both;
+}
+.anim-dropdown {
+  animation: dropdown-enter 200ms var(--ease-standard) both;
+  transform-origin: top right;
+}
+[dir="rtl"] .anim-dropdown {
+  transform-origin: top left;
+}
+.anim-modal {
+  animation: modal-enter 300ms var(--ease-spring) both;
+}
+.anim-backdrop {
+  animation: backdrop-fade 250ms var(--ease-standard) both;
+}
+.anim-toast {
+  animation: slide-in-end 300ms var(--ease-spring) both;
+}
+.anim-shake {
+  animation: shake-x 400ms var(--ease-standard);
+}
+.anim-row-highlight {
+  animation: row-highlight 800ms var(--ease-standard) both;
+}
+.anim-section-content {
+  animation: section-expand 200ms var(--ease-standard) both;
+}
+
+/* Stagger helper — chain on grids to ramp children in 50ms apart. */
+.stagger > * {
+  animation: pop-in 300ms var(--ease-standard) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 50ms; }
+.stagger > *:nth-child(3) { animation-delay: 100ms; }
+.stagger > *:nth-child(4) { animation-delay: 150ms; }
+.stagger > *:nth-child(5) { animation-delay: 200ms; }
+.stagger > *:nth-child(6) { animation-delay: 250ms; }
+.stagger > *:nth-child(7) { animation-delay: 300ms; }
+.stagger > *:nth-child(8) { animation-delay: 350ms; }
+
+/* Standard easing for any element that uses transition utilities. We override
+ * the default Tailwind ease curve for buttons / links / cards globally so the
+ * whole app feels coherently calm. */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  transition-timing-function: var(--ease-standard);
+  transition-duration: 200ms;
+}
+
+button:active:not(:disabled),
+[role="button"]:active {
+  transform: scale(0.97);
+}
+
+/* Respect users who've asked for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Print mode. When printing, hide everything except the active print target
+ * and render it cleanly on A4.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-target,
+  .print-target * {
+    visibility: visible !important;
+  }
+
+  .print-target {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    background: white !important;
+    color: black !important;
+    font-size: 10pt !important;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+}
+
+/* When the print target lives off-screen during normal use, keep it
+ * positioned so html2canvas can still render it. */
+.print-target-offscreen {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 794px; /* approximate A4 at 96dpi */
+  background: white;
+  color: black;
+  pointer-events: none;
 }

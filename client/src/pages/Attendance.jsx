@@ -9,9 +9,10 @@ import {
 import { listUsers } from '../api/users'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
+import { useLanguage } from '../context/LanguageContext'
 
 const inputClass =
-  'w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all'
+  'w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all'
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -23,27 +24,29 @@ function fmtTime(t) {
 }
 
 function fmtHours(hms) {
-  // backend sends "HH:MM:SS" from TIMEDIFF; show "Hh Mm"
   if (!hms) return '—'
   const [h, m] = hms.split(':')
   return `${parseInt(h, 10)}h ${parseInt(m, 10)}m`
 }
 
 export default function Attendance() {
+  const { t, lang, formatName } = useLanguage()
+  const localeTag = lang === 'ku' ? 'ku' : undefined
+
   const [date, setDate] = useState(todayIso())
   const [staffFilter, setStaffFilter] = useState('')
   const [users, setUsers] = useState([])
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [modal, setModal] = useState(null) // null | { mode: 'create'|'edit'|'clockout', record? }
+  const [modal, setModal] = useState(null)
 
   const loadUsers = async () => {
     try {
       const r = await listUsers({ active: 'true' })
       setUsers(r.users || [])
-    } catch (e) {
-      // Non-fatal — the dropdown will just be empty.
+    } catch (_e) {
+      /* non-fatal */
     }
   }
 
@@ -59,7 +62,7 @@ export default function Attendance() {
       const r = await getAttendance(params)
       setRecords(r.records || [])
     } catch (e) {
-      setError(e.response?.data?.error || 'Failed to load attendance')
+      setError(e.response?.data?.error || t('common.failedLoad'))
     } finally {
       setLoading(false)
     }
@@ -67,6 +70,7 @@ export default function Attendance() {
 
   useEffect(() => {
     loadUsers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -74,34 +78,47 @@ export default function Attendance() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, year, staffFilter])
 
-  // Filter to the picked day for the visible table.
   const dayRecords = useMemo(
     () => records.filter((r) => (r.work_date || '').slice(0, 10) === date),
     [records, date]
   )
 
+  const dayLabel = new Date(date + 'T00:00:00').toLocaleDateString(localeTag, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+
+  const countLabel =
+    dayRecords.length === 1
+      ? t('attendance.recordsCountOne')
+      : t('attendance.recordsCount', { count: dayRecords.length })
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-on-surface tracking-tight">Staff Attendance</h1>
-          <p className="text-sm text-on-surface-variant mt-1">
-            Track clock-in / clock-out for the team
-          </p>
+          <h1 className="text-3xl font-bold text-on-surface tracking-tight">
+            {t('attendance.title')}
+          </h1>
+          <p className="text-sm text-on-surface-variant mt-1">{t('attendance.subtitle')}</p>
         </div>
         <button
           onClick={() => setModal({ mode: 'create' })}
           className="px-4 py-2.5 bg-secondary text-on-secondary rounded-lg font-semibold text-sm hover:opacity-90 active:scale-95 transition-all flex items-center gap-2"
         >
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>more_time</span>
-          Record Attendance
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+            more_time
+          </span>
+          {t('attendance.record')}
         </button>
       </div>
 
       <div className="bg-surface-container-lowest rounded-xl border border-outline-variant p-4 flex flex-wrap items-end gap-4">
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-            Date
+            {t('attendance.date')}
           </label>
           <input
             type="date"
@@ -112,17 +129,17 @@ export default function Attendance() {
         </div>
         <div className="flex-1 min-w-[220px]">
           <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-            Staff Member
+            {t('attendance.staffMember')}
           </label>
           <select
             value={staffFilter}
             onChange={(e) => setStaffFilter(e.target.value)}
             className={inputClass}
           >
-            <option value="">All staff</option>
+            <option value="">{t('attendance.allStaff')}</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.name} — {u.role}
+                {formatName(u.name, u.role)} — {t(`role.${u.role}`)}
               </option>
             ))}
           </select>
@@ -131,17 +148,8 @@ export default function Attendance() {
 
       <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm overflow-hidden">
         <div className="px-6 py-4 bg-surface-container-low border-b border-outline-variant flex justify-between items-center">
-          <h2 className="text-base font-semibold text-on-surface">
-            {new Date(date + 'T00:00:00').toLocaleDateString(undefined, {
-              weekday: 'long',
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-            })}
-          </h2>
-          <span className="text-xs text-on-surface-variant">
-            {dayRecords.length} record{dayRecords.length === 1 ? '' : 's'}
-          </span>
+          <h2 className="text-base font-semibold text-on-surface">{dayLabel}</h2>
+          <span className="text-xs text-on-surface-variant">{countLabel}</span>
         </div>
 
         {loading ? (
@@ -151,51 +159,61 @@ export default function Attendance() {
         ) : error ? (
           <div className="p-6 bg-error-container text-on-error-container">{error}</div>
         ) : dayRecords.length === 0 ? (
-          <div className="p-12 text-center text-on-surface-variant">
-            No attendance recorded for this day.
-          </div>
+          <div className="p-12 text-center text-on-surface-variant">{t('attendance.empty')}</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-surface-container-low border-b border-outline-variant text-xs uppercase tracking-wider text-on-surface-variant">
               <tr>
-                <th className="px-6 py-4 text-left font-semibold">Staff</th>
-                <th className="px-6 py-4 text-left font-semibold">Role</th>
-                <th className="px-6 py-4 text-left font-semibold">Date</th>
-                <th className="px-6 py-4 text-left font-semibold">Time In</th>
-                <th className="px-6 py-4 text-left font-semibold">Time Out</th>
-                <th className="px-6 py-4 text-left font-semibold">Hours</th>
-                <th className="px-6 py-4 text-right font-semibold">Actions</th>
+                <th className="px-6 py-4 text-start font-semibold">{t('attendance.staff')}</th>
+                <th className="px-6 py-4 text-start font-semibold">{t('common.role')}</th>
+                <th className="px-6 py-4 text-start font-semibold">{t('attendance.date')}</th>
+                <th className="px-6 py-4 text-start font-semibold">{t('attendance.timeIn')}</th>
+                <th className="px-6 py-4 text-start font-semibold">{t('attendance.timeOut')}</th>
+                <th className="px-6 py-4 text-start font-semibold">{t('attendance.hours')}</th>
+                <th className="px-6 py-4 text-end font-semibold">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant">
               {dayRecords.map((r) => (
                 <tr key={r.id} className="hover:bg-surface-container-low transition-colors">
-                  <td className="px-6 py-4 font-semibold text-on-surface">{r.staff_name || '—'}</td>
-                  <td className="px-6 py-4 text-on-surface-variant capitalize">{r.staff_role}</td>
+                  <td className="px-6 py-4 font-semibold text-on-surface">
+                    {r.staff_name ? formatName(r.staff_name, r.staff_role) : '—'}
+                  </td>
+                  <td className="px-6 py-4 text-on-surface-variant">
+                    {r.staff_role ? t(`role.${r.staff_role}`) : ''}
+                  </td>
                   <td className="px-6 py-4 text-on-surface-variant tabular-nums">
                     {(r.work_date || '').slice(0, 10)}
                   </td>
-                  <td className="px-6 py-4 font-mono tabular-nums">{fmtTime(r.time_in)}</td>
-                  <td className="px-6 py-4 font-mono tabular-nums">
-                    {r.time_out ? fmtTime(r.time_out) : (
-                      <span className="text-warning font-semibold">— still in —</span>
+                  <td className="px-6 py-4 font-mono tabular-nums text-on-surface">
+                    {fmtTime(r.time_in)}
+                  </td>
+                  <td className="px-6 py-4 font-mono tabular-nums text-on-surface">
+                    {r.time_out ? (
+                      fmtTime(r.time_out)
+                    ) : (
+                      <span className="text-warning font-semibold">
+                        {t('attendance.stillIn')}
+                      </span>
                     )}
                   </td>
-                  <td className="px-6 py-4 tabular-nums">{fmtHours(r.hours_worked)}</td>
-                  <td className="px-6 py-4 text-right space-x-3">
+                  <td className="px-6 py-4 tabular-nums text-on-surface">
+                    {fmtHours(r.hours_worked)}
+                  </td>
+                  <td className="px-6 py-4 text-end space-x-3">
                     {!r.time_out && (
                       <button
                         onClick={() => setModal({ mode: 'clockout', record: r })}
                         className="text-xs text-secondary font-semibold hover:underline"
                       >
-                        Clock out
+                        {t('attendance.clockOut')}
                       </button>
                     )}
                     <button
                       onClick={() => setModal({ mode: 'edit', record: r })}
                       className="text-xs text-on-surface-variant font-semibold hover:text-secondary hover:underline"
                     >
-                      Edit
+                      {t('attendance.edit')}
                     </button>
                   </td>
                 </tr>
@@ -223,6 +241,7 @@ export default function Attendance() {
 }
 
 function AttendanceModal({ mode, record, users, defaultDate, onClose, onSaved }) {
+  const { t, formatName } = useLanguage()
   const isEdit = mode === 'edit'
   const isCreate = mode === 'create'
   const isClockOut = mode === 'clockout'
@@ -259,11 +278,15 @@ function AttendanceModal({ mode, record, users, defaultDate, onClose, onSaved })
       }
       onSaved()
     } catch (e) {
-      setErr(e.response?.data?.error || 'Failed to save')
+      setErr(e.response?.data?.error || t('common.failedSave'))
     }
   }
 
-  const title = isCreate ? 'Record Attendance' : isClockOut ? 'Clock Out' : 'Edit Attendance'
+  const title = isCreate
+    ? t('attendance.modal.create')
+    : isClockOut
+    ? t('attendance.modal.clockOut')
+    : t('attendance.modal.edit')
 
   return (
     <Modal open onClose={onClose} title={title}>
@@ -272,24 +295,26 @@ function AttendanceModal({ mode, record, users, defaultDate, onClose, onSaved })
           <>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-                Staff Member
+                {t('attendance.staffMember')}
               </label>
               <select
-                {...register('user_id', { required: 'Required' })}
+                {...register('user_id', { required: t('common.required') })}
                 className={inputClass}
               >
-                <option value="">Select staff…</option>
+                <option value="">{t('attendance.selectStaff')}</option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} — {u.role}
+                    {formatName(u.name, u.role)} — {t(`role.${u.role}`)}
                   </option>
                 ))}
               </select>
-              {errors.user_id && <p className="mt-1 text-xs text-error">{errors.user_id.message}</p>}
+              {errors.user_id && (
+                <p className="mt-1 text-xs text-error">{errors.user_id.message}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-                Date
+                {t('attendance.date')}
               </label>
               <input
                 type="date"
@@ -299,14 +324,16 @@ function AttendanceModal({ mode, record, users, defaultDate, onClose, onSaved })
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-                Time In
+                {t('attendance.timeIn')}
               </label>
               <input
                 type="time"
-                {...register('time_in', { required: 'Required' })}
+                {...register('time_in', { required: t('common.required') })}
                 className={inputClass}
               />
-              {errors.time_in && <p className="mt-1 text-xs text-error">{errors.time_in.message}</p>}
+              {errors.time_in && (
+                <p className="mt-1 text-xs text-error">{errors.time_in.message}</p>
+              )}
             </div>
           </>
         )}
@@ -315,13 +342,13 @@ function AttendanceModal({ mode, record, users, defaultDate, onClose, onSaved })
           <>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-                Time In
+                {t('attendance.timeIn')}
               </label>
               <input type="time" {...register('time_in')} className={inputClass} />
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-                Time Out
+                {t('attendance.timeOut')}
               </label>
               <input type="time" {...register('time_out')} className={inputClass} />
             </div>
@@ -331,22 +358,24 @@ function AttendanceModal({ mode, record, users, defaultDate, onClose, onSaved })
         {isClockOut && (
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-              Time Out
+              {t('attendance.timeOut')}
             </label>
             <input
               type="time"
               defaultValue={new Date().toTimeString().slice(0, 5)}
-              {...register('time_out', { required: 'Required' })}
+              {...register('time_out', { required: t('common.required') })}
               className={inputClass}
             />
-            {errors.time_out && <p className="mt-1 text-xs text-error">{errors.time_out.message}</p>}
+            {errors.time_out && (
+              <p className="mt-1 text-xs text-error">{errors.time_out.message}</p>
+            )}
           </div>
         )}
 
         {!isClockOut && (
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
-              Notes
+              {t('attendance.notes')}
             </label>
             <textarea rows={2} {...register('notes')} className={inputClass} />
           </div>
@@ -364,7 +393,7 @@ function AttendanceModal({ mode, record, users, defaultDate, onClose, onSaved })
             onClick={onClose}
             className="px-4 py-2 border border-outline-variant rounded-lg text-sm font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="submit"
@@ -372,7 +401,7 @@ function AttendanceModal({ mode, record, users, defaultDate, onClose, onSaved })
             className="px-4 py-2 bg-secondary text-on-secondary rounded-lg text-sm font-semibold hover:opacity-90 active:scale-95 transition-all disabled:opacity-60 flex items-center gap-2"
           >
             {isSubmitting ? <Spinner size={16} /> : null}
-            Save
+            {t('common.save')}
           </button>
         </div>
       </form>

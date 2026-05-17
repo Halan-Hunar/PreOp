@@ -62,7 +62,7 @@ router.get('/pending', authorize('anaesthetist', 'admin'), async (req, res) => {
 });
 
 // GET /api/assessments/:id — full assessment with lab results and clearance
-router.get('/:id', async (req, res) => {
+router.get('/:id', authorize('admin', 'anaesthetist'), async (req, res) => {
   try {
     const [assessments] = await db.query(
       `SELECT a.*, p.full_name as patient_name, p.dob, p.gender, p.blood_type,
@@ -176,12 +176,14 @@ router.post('/', authorize('anaesthetist'), [
       'npo_solids_since', 'npo_liquids_since', 'npo_confirmed',
       'premedication_given', 'premedication_details',
       'anaesthetic_plan', 'anaesthetic_plan_details',
-      'special_notes', 'risk_notes',
+      'special_notes', 'risk_notes', 'extra_data',
     ];
 
     const values = fields.map(f => {
       if (f === 'created_by') return req.user.id;
       if (f === 'bmi') return bmi;
+      if (f === 'extra_data' && req.body[f] !== undefined)
+        return typeof req.body[f] === 'string' ? req.body[f] : JSON.stringify(req.body[f]);
       return req.body[f] !== undefined ? req.body[f] : null;
     });
 
@@ -240,12 +242,17 @@ router.put('/:id', authorize('anaesthetist', 'admin'), async (req, res) => {
       'npo_solids_since', 'npo_liquids_since', 'npo_confirmed',
       'premedication_given', 'premedication_details',
       'anaesthetic_plan', 'anaesthetic_plan_details',
-      'special_notes', 'risk_notes',
+      'special_notes', 'risk_notes', 'extra_data',
     ];
 
     const updates = {};
     allowed.forEach(field => {
-      if (req.body[field] !== undefined) updates[field] = req.body[field];
+      if (req.body[field] !== undefined) {
+        if (field === 'extra_data' && typeof req.body[field] !== 'string')
+          updates[field] = JSON.stringify(req.body[field]);
+        else
+          updates[field] = req.body[field];
+      }
     });
 
     // Recalculate BMI if weight/height changed
@@ -401,7 +408,7 @@ router.post('/:id/clearance', authorize('anaesthetist'), [
 });
 
 // POST /api/assessments/:id/notes — add clinical note
-router.post('/:id/notes', [
+router.post('/:id/notes', authorize('admin', 'anaesthetist'), [
   body('note').trim().notEmpty(),
 ], async (req, res) => {
   const errors = validationResult(req);

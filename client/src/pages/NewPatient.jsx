@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { createPatient } from '../api/patients'
 import Spinner from '../components/Spinner'
+import { useLanguage } from '../context/LanguageContext'
 
 const BLOOD_TYPES = ['unknown', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 
@@ -19,10 +20,11 @@ function Field({ label, error, children, full = false }) {
 }
 
 const inputClass =
-  'w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all'
+  'w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all'
 
 export default function NewPatient() {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const {
     register,
     handleSubmit,
@@ -37,7 +39,6 @@ export default function NewPatient() {
 
   const onSubmit = async (values) => {
     setSubmitError('')
-    // strip empty optional fields
     const payload = {}
     Object.entries(values).forEach(([k, v]) => {
       if (v !== '' && v !== undefined && v !== null) payload[k] = v
@@ -47,7 +48,7 @@ export default function NewPatient() {
       const result = await createPatient(payload)
       navigate(`/patients/${result.id}`)
     } catch (e) {
-      setSubmitError(e.response?.data?.error || 'Failed to register patient')
+      setSubmitError(e.response?.data?.error || t('newPatient.failed'))
     }
   }
 
@@ -61,12 +62,12 @@ export default function NewPatient() {
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
             arrow_back
           </span>
-          Back
+          {t('common.back')}
         </button>
-        <h1 className="text-3xl font-bold text-on-surface tracking-tight">Register New Patient</h1>
-        <p className="text-sm text-on-surface-variant mt-1">
-          Capture demographic and contact details before scheduling an evaluation.
-        </p>
+        <h1 className="text-3xl font-bold text-on-surface tracking-tight">
+          {t('newPatient.title')}
+        </h1>
+        <p className="text-sm text-on-surface-variant mt-1">{t('newPatient.subtitle')}</p>
       </div>
 
       <form
@@ -76,41 +77,41 @@ export default function NewPatient() {
         <section>
           <h2 className="text-lg font-semibold text-on-surface mb-4 flex items-center gap-2">
             <span className="material-symbols-outlined text-secondary">person</span>
-            Patient Identity
+            {t('newPatient.section.identity')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <Field label="Full Name *" error={errors.full_name?.message} full>
+            <Field label={`${t('newPatient.fullName')} *`} error={errors.full_name?.message} full>
               <input
-                {...register('full_name', { required: 'Full name is required' })}
+                {...register('full_name', { required: t('newPatient.fullNameRequired') })}
                 className={inputClass}
-                placeholder="e.g. Jonathan Smith"
+                placeholder={t('newPatient.fullNamePlaceholder')}
               />
             </Field>
-            <Field label="Date of Birth *" error={errors.dob?.message}>
+            <Field label={`${t('newPatient.dob')} *`} error={errors.dob?.message}>
               <input
                 type="date"
-                {...register('dob', { required: 'DOB is required' })}
+                {...register('dob', { required: t('newPatient.dobRequired') })}
                 className={inputClass}
               />
             </Field>
-            <Field label="Gender *" error={errors.gender?.message}>
+            <Field label={`${t('newPatient.gender')} *`} error={errors.gender?.message}>
               <select {...register('gender', { required: true })} className={inputClass}>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
+                <option value="male">{t('gender.male')}</option>
+                <option value="female">{t('gender.female')}</option>
               </select>
             </Field>
-            <Field label="National ID">
+            <Field label={t('newPatient.nationalId')}>
               <input
                 {...register('national_id')}
                 className={inputClass}
-                placeholder="National identification number"
+                placeholder={t('newPatient.nationalIdPlaceholder')}
               />
             </Field>
-            <Field label="Blood Type">
+            <Field label={t('newPatient.bloodType')}>
               <select {...register('blood_type')} className={inputClass}>
                 {BLOOD_TYPES.map((b) => (
                   <option key={b} value={b}>
-                    {b === 'unknown' ? 'Unknown' : b}
+                    {b === 'unknown' ? t('blood.unknown') : b}
                   </option>
                 ))}
               </select>
@@ -121,26 +122,26 @@ export default function NewPatient() {
         <section>
           <h2 className="text-lg font-semibold text-on-surface mb-4 flex items-center gap-2">
             <span className="material-symbols-outlined text-secondary">contact_page</span>
-            Contact
+            {t('newPatient.section.contact')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <Field label="Phone">
-              <input {...register('phone')} className={inputClass} placeholder="+20 ..." />
+            <Field label={t('newPatient.phone')}>
+              <input {...register('phone')} className={inputClass} />
             </Field>
-            <Field label="Email">
+            <Field label={t('newPatient.email')}>
               <input
                 type="email"
                 {...register('email')}
                 className={inputClass}
-                placeholder="patient@email.com"
+                placeholder={t('newPatient.emailPlaceholder')}
               />
             </Field>
-            <Field label="Address" full>
+            <Field label={t('newPatient.address')} full>
               <textarea
                 {...register('address')}
                 rows={2}
                 className={inputClass}
-                placeholder="Street, city, governorate"
+                placeholder={t('newPatient.addressPlaceholder')}
               />
             </Field>
           </div>
@@ -149,20 +150,20 @@ export default function NewPatient() {
         <section>
           <h2 className="text-lg font-semibold text-on-surface mb-4 flex items-center gap-2">
             <span className="material-symbols-outlined text-secondary">emergency</span>
-            Emergency Contact
+            {t('newPatient.section.emergency')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <Field label="Name">
+            <Field label={t('newPatient.ecName')}>
               <input {...register('emergency_contact_name')} className={inputClass} />
             </Field>
-            <Field label="Phone">
+            <Field label={t('newPatient.ecPhone')}>
               <input {...register('emergency_contact_phone')} className={inputClass} />
             </Field>
-            <Field label="Relation">
+            <Field label={t('newPatient.ecRelation')}>
               <input
                 {...register('emergency_contact_relation')}
                 className={inputClass}
-                placeholder="Spouse, parent, etc."
+                placeholder={t('newPatient.ecRelationPlaceholder')}
               />
             </Field>
           </div>
@@ -183,17 +184,21 @@ export default function NewPatient() {
             onClick={() => navigate(-1)}
             className="px-5 py-2.5 border border-outline-variant rounded-lg text-sm font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
             className="px-5 py-2.5 bg-secondary text-on-secondary rounded-lg font-semibold text-sm hover:opacity-90 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60"
           >
-            {isSubmitting ? <Spinner size={16} /> : (
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>save</span>
+            {isSubmitting ? (
+              <Spinner size={16} />
+            ) : (
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                save
+              </span>
             )}
-            Register Patient
+            {t('newPatient.register')}
           </button>
         </div>
       </form>
