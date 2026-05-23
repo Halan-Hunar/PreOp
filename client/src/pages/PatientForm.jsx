@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { createPatient } from '../api/patients'
+import { createPatient, getPatient, updatePatient } from '../api/patients'
 import Spinner from '../components/Spinner'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -22,12 +22,24 @@ function Field({ label, error, children, full = false }) {
 const inputClass =
   'w-full px-4 py-2.5 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all'
 
-export default function NewPatient() {
+/**
+ * Shared form used by both /patients/new and /patients/:id/edit. Detects
+ * which mode it's in via the route's `:id` param.
+ */
+export default function PatientForm() {
   const navigate = useNavigate()
   const { t } = useLanguage()
+  const { id } = useParams()
+  const isEdit = !!id
+
+  const [loading, setLoading] = useState(isEdit)
+  const [loadError, setLoadError] = useState('')
+  const [submitError, setSubmitError] = useState('')
+
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm({
     defaultValues: {
@@ -35,21 +47,82 @@ export default function NewPatient() {
       gender: 'male',
     },
   })
-  const [submitError, setSubmitError] = useState('')
+
+  // Load the patient when editing so the form prefills with current values.
+  useEffect(() => {
+    if (!isEdit) return
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setLoadError('')
+      try {
+        const r = await getPatient(id)
+        if (cancelled) return
+        const p = r.patient || {}
+        // <input type="date"> needs YYYY-MM-DD, but the API may return a full
+        // ISO timestamp.
+        const dob = p.dob ? String(p.dob).slice(0, 10) : ''
+        reset({
+          full_name: p.full_name || '',
+          dob,
+          gender: p.gender || 'male',
+          national_id: p.national_id || '',
+          blood_type: p.blood_type || 'unknown',
+          phone: p.phone || '',
+          email: p.email || '',
+          address: p.address || '',
+          emergency_contact_name: p.emergency_contact_name || '',
+          emergency_contact_phone: p.emergency_contact_phone || '',
+          emergency_contact_relation: p.emergency_contact_relation || '',
+        })
+      } catch (e) {
+        if (!cancelled) setLoadError(e.response?.data?.error || t('common.failedLoad'))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [id, isEdit, reset, t])
 
   const onSubmit = async (values) => {
     setSubmitError('')
+    // Strip empty optional fields so the backend doesn't validate blanks
+    // (e.g. an empty `email` would fail the isEmail rule).
     const payload = {}
     Object.entries(values).forEach(([k, v]) => {
       if (v !== '' && v !== undefined && v !== null) payload[k] = v
     })
 
     try {
-      const result = await createPatient(payload)
-      navigate(`/patients/${result.id}`)
+      if (isEdit) {
+        await updatePatient(id, payload)
+        navigate(`/patients/${id}`)
+      } else {
+        const result = await createPatient(payload)
+        navigate(`/patients/${result.id}`)
+      }
     } catch (e) {
       setSubmitError(e.response?.data?.error || t('newPatient.failed'))
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Spinner size={32} />
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="bg-error-container text-on-error-container p-6 rounded-xl">
+        {loadError}
+      </div>
+    )
   }
 
   return (
@@ -65,9 +138,11 @@ export default function NewPatient() {
           {t('common.back')}
         </button>
         <h1 className="text-3xl font-bold text-on-surface tracking-tight">
-          {t('newPatient.title')}
+          {isEdit ? t('editPatient.title') : t('newPatient.title')}
         </h1>
-        <p className="text-sm text-on-surface-variant mt-1">{t('newPatient.subtitle')}</p>
+        <p className="text-sm text-on-surface-variant mt-1">
+          {isEdit ? t('editPatient.subtitle') : t('newPatient.subtitle')}
+        </p>
       </div>
 
       <form
@@ -198,7 +273,7 @@ export default function NewPatient() {
                 save
               </span>
             )}
-            {t('newPatient.register')}
+            {isEdit ? t('editPatient.save') : t('newPatient.register')}
           </button>
         </div>
       </form>

@@ -12,7 +12,9 @@ import {
   printNode,
   exportSheetsAsExcel,
 } from '../utils/exportHelpers'
+import { buildAssessmentSheets } from '../utils/assessmentExcel'
 import { useLanguage } from '../context/LanguageContext'
+import { useAuth } from '../context/AuthContext'
 
 const inputClass =
   'w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary transition-all'
@@ -29,7 +31,8 @@ function SummaryItem({ label, value }) {
 export default function ClearanceView() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { t, lang, dr } = useLanguage()
+  const { t, lang, dr, formatName } = useLanguage()
+  const { user } = useAuth()
   const printRef = useRef(null)
   const localeTag = lang === 'ku' ? 'ku' : undefined
 
@@ -96,36 +99,67 @@ export default function ClearanceView() {
   const hasDecision = !!clearance
 
   // Parse the JSON-encoded extras (mirrors AssessmentForm's storage) so the
-  // print form can render the full paper-replica.
+  // print form can render the full paper-replica. Prefer the new
+  // `extra_data` column; fall back to legacy storage in `special_notes`.
   let extra = {}
-  if (assessment.special_notes) {
+  const extraSrc = assessment.extra_data || assessment.special_notes
+  if (extraSrc) {
     try {
-      const parsed = JSON.parse(assessment.special_notes)
-      if (parsed && parsed.__extra) extra = parsed
+      const parsed = typeof extraSrc === 'string' ? JSON.parse(extraSrc) : extraSrc
+      if (parsed && typeof parsed === 'object') {
+        const { __extra: _ignored, ...rest } = parsed
+        extra = rest
+      }
     } catch {
-      /* old free-text note */
+      /* legacy free-text — leave extra empty */
     }
   }
+
+  // Doctor name shown on the print form: when the logged-in user is the
+  // anaesthetist, treat them as the signing doctor on this page. Admins fall
+  // back to the creator's name from the DB.
+  const doctorDisplayName = user?.role === 'anaesthetist'
+    ? formatName(user?.name, user?.role)
+    : formatName(assessment.created_by_name, 'anaesthetist')
 
   const filenameBase = `Assessment_${assessment.id}_${(assessment.patient_name || 'patient').replace(/\s+/g, '_')}`
   const handleExportPdf = () => exportNodeAsPdf(printRef.current, `${filenameBase}.pdf`)
   const handleExportImage = () => exportNodeAsImage(printRef.current, `${filenameBase}.png`)
   const handlePrint = () => printNode(printRef.current)
   const handleExportExcel = () => {
-    const flat = { ...assessment }
+    const sheets = buildAssessmentSheets({
+      assessment,
+      extra,
+      doctorName: doctorDisplayName,
+      t,
+    })
     if (clearance) {
-      Object.entries(clearance).forEach(([k, v]) => (flat[`clearance.${k}`] = v))
+      // Append the clearance decision as its own sheet of label/value pairs.
+      sheets.push({
+        name: 'Clearance',
+        rows: [
+          { Field: t('clearance.decision'), Value: t(`status.${clearance.decision}`) },
+          { Field: t('clearance.decidedBy'), Value: doctorDisplayName },
+          { Field: t('clearance.decidedAt'), Value: clearance.decided_at || '' },
+          { Field: t('clearance.conditions'), Value: clearance.conditions || '' },
+          { Field: t('clearance.reason'), Value: clearance.reason || '' },
+          { Field: t('clearance.followUpNotes'), Value: clearance.follow_up_notes || '' },
+        ],
+      })
     }
-    exportSheetsAsExcel(
-      [{ name: 'Assessment', rows: [flat] }],
-      `${filenameBase}.xlsx`
-    )
+    exportSheetsAsExcel(sheets, `${filenameBase}.xlsx`)
   }
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <AssessmentPrintForm ref={printRef} data={{ ...assessment, extra }} />
-      <div>
+      <AssessmentPrintForm
+        ref={printRef}
+        data={{ ...assessment, extra }}
+        doctorDisplayName={doctorDisplayName}
+      />
+      {/* relative + z-index so the ExportMenu dropdown paints above the
+          summary cards below (each card creates its own stacking context). */}
+      <div className="relative z-30">
         <button
           onClick={() => navigate(`/patients/${assessment.patient_id}`)}
           className="text-sm text-on-surface-variant hover:text-secondary inline-flex items-center gap-1 mb-3"

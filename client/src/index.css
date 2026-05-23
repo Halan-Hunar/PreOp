@@ -355,7 +355,7 @@ button:active:not(:disabled),
   position: fixed;
   left: -10000px;
   top: 0;
-  width: 794px; /* approximate A4 at 96dpi */
+  width: 900px; /* a bit wider than A4 at 96dpi so cells have room to breathe */
   background: white;
   color: black;
   pointer-events: none;

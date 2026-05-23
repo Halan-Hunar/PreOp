@@ -6,7 +6,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import PatientList from './pages/PatientList'
 import PatientProfile from './pages/PatientProfile'
-import NewPatient from './pages/NewPatient'
+import PatientForm from './pages/PatientForm'
 import AppointmentCalendar from './pages/AppointmentCalendar'
 import AssessmentForm from './pages/AssessmentForm'
 import ClearanceView from './pages/ClearanceView'
@@ -34,7 +34,15 @@ export default function App() {
           path="/patients/new"
           element={
             <ProtectedRoute roles={['receptionist', 'nurse']}>
-              <NewPatient />
+              <PatientForm />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patients/:id/edit"
+          element={
+            <ProtectedRoute roles={['admin', 'anaesthetist', 'receptionist', 'nurse']}>
+              <PatientForm />
             </ProtectedRoute>
           }
         />

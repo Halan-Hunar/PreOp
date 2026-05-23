@@ -149,6 +149,12 @@ const ku = {
   'newPatient.dobRequired': 'بەرواری لەدایکبوون پێویستە',
   'newPatient.failed': 'تۆمارکردنی نەخۆش سەرکەوتوو نەبوو',
 
+  // ───────── Edit Patient ─────────
+  'editPatient.title': 'دەستکاریکردنی نەخۆش',
+  'editPatient.subtitle': 'نوێکردنەوەی زانیاری کەسی یان پەیوەندی. هەموو گۆڕانکارییەک تۆمار دەکرێت.',
+  'editPatient.save': 'پاشەکەوتکردنی گۆڕانکارییەکان',
+  'editPatient.button': 'دەستکاریکردنی نەخۆش',
+
   // ───────── Patient Profile ─────────
   'patientProfile.back': 'هەموو نەخۆشەکان',
   'patientProfile.dob': 'بەرواری لەدایکبوون',

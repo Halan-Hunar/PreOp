@@ -147,6 +147,12 @@ const en = {
   'newPatient.dobRequired': 'Date of birth is required',
   'newPatient.failed': 'Failed to register patient',
 
+  // ───────── Edit Patient ─────────
+  'editPatient.title': 'Edit Patient',
+  'editPatient.subtitle': 'Update demographic or contact details. Changes are logged.',
+  'editPatient.save': 'Save Changes',
+  'editPatient.button': 'Edit Patient',
+
   // ───────── Patient Profile ─────────
   'patientProfile.back': 'All patients',
   'patientProfile.dob': 'DOB',

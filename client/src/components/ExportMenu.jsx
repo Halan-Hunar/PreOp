@@ -67,7 +67,11 @@ export default function ExportMenu({ options, label, disabled }) {
   }
 
   return (
-    <div className="relative" ref={wrapRef}>
+    /* `relative z-40` makes the menu its own stacking context that beats the
+     * `anim-pop-in` cards below — those cards leave a `transform` on the
+     * element which creates a sibling stacking context with z=auto, so without
+     * an explicit z on our side the dropdown ends up painted behind them. */
+    <div className="relative z-40" ref={wrapRef}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -88,7 +92,7 @@ export default function ExportMenu({ options, label, disabled }) {
       </button>
 
       {open && (
-        <div className="absolute end-0 mt-2 w-48 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg overflow-hidden z-50 anim-dropdown">
+        <div className="absolute end-0 mt-2 w-56 bg-surface-container-lowest border border-outline-variant rounded-xl shadow-xl overflow-hidden z-50 anim-dropdown">
           <ul className="py-1">
             {options.map((opt) => {
               const labelText = opt.label || (LABEL_KEYS[opt.id] ? t(LABEL_KEYS[opt.id]) : opt.id)

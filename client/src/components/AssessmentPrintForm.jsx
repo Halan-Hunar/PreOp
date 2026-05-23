@@ -15,14 +15,14 @@ const Check = ({ on }) => (
   <span
     style={{
       display: 'inline-block',
-      width: 12,
-      height: 12,
+      width: 14,
+      height: 14,
       border: '1px solid #000',
-      marginInlineEnd: 4,
+      marginInlineEnd: 6,
       verticalAlign: 'middle',
       textAlign: 'center',
-      lineHeight: '10px',
-      fontSize: 10,
+      lineHeight: '12px',
+      fontSize: 11,
     }}
   >
     {on ? '✓' : ''}
@@ -31,7 +31,7 @@ const Check = ({ on }) => (
 
 const cell = {
   border: '1px solid #000',
-  padding: '4px 6px',
+  padding: '8px 10px',
   verticalAlign: 'top',
 }
 
@@ -46,10 +46,10 @@ const SectionTitle = ({ children }) => (
     style={{
       background: '#e5e5e5',
       border: '1px solid #000',
-      padding: '3px 6px',
+      padding: '7px 10px',
       fontWeight: 700,
-      fontSize: 11,
-      marginTop: 4,
+      fontSize: 12.5,
+      marginTop: 12,
     }}
   >
     {children}
@@ -63,21 +63,28 @@ const Row = ({ children }) => (
 )
 
 const Field = ({ label, value, flex = 1 }) => (
-  <div style={{ flex, padding: '3px 6px', borderInlineEnd: '1px solid #000', minHeight: 22 }}>
+  <div
+    style={{
+      flex,
+      padding: '7px 10px',
+      borderInlineEnd: '1px solid #000',
+      minHeight: 30,
+    }}
+  >
     <span style={{ fontWeight: 700 }}>{label}: </span>
     <span>{value || ''}</span>
   </div>
 )
 
 const FieldNoBorder = ({ label, value, flex = 1 }) => (
-  <div style={{ flex, padding: '3px 6px', minHeight: 22 }}>
+  <div style={{ flex, padding: '7px 10px', minHeight: 30 }}>
     <span style={{ fontWeight: 700 }}>{label}: </span>
     <span>{value || ''}</span>
   </div>
 )
 
 const AssessmentPrintForm = forwardRef(function AssessmentPrintForm(
-  { data, clinicName = 'PreOp Clinic', generatedAt },
+  { data, clinicName = 'PreOp Clinic', generatedAt, doctorDisplayName },
   ref
 ) {
   // Pull data out with safe fallbacks. `data.extra` holds the new structured
@@ -95,12 +102,12 @@ const AssessmentPrintForm = forwardRef(function AssessmentPrintForm(
       ref={ref}
       className="print-target-offscreen"
       style={{
-        padding: 16,
+        padding: 32,
         fontFamily: 'Arial, Helvetica, sans-serif',
-        fontSize: 10.5,
+        fontSize: 12,
         color: '#000',
         background: '#fff',
-        lineHeight: 1.3,
+        lineHeight: 1.45,
       }}
     >
       {/* ─── Top banner ─── */}
@@ -108,11 +115,12 @@ const AssessmentPrintForm = forwardRef(function AssessmentPrintForm(
         style={{
           border: '1px solid #000',
           background: '#e0e0e0',
-          padding: '4px 8px',
+          padding: '10px 14px',
           fontWeight: 700,
-          fontSize: 12,
+          fontSize: 14,
           display: 'flex',
           justifyContent: 'space-between',
+          letterSpacing: '0.02em',
         }}
       >
         <span>PRE-ANESTHESIA EVALUATION FORM</span>
@@ -456,27 +464,30 @@ const AssessmentPrintForm = forwardRef(function AssessmentPrintForm(
       <div
         style={{
           display: 'flex',
-          gap: 16,
-          marginTop: 12,
+          gap: 24,
+          marginTop: 24,
           alignItems: 'flex-end',
         }}
       >
         <div style={{ flex: 2 }}>
-          <div style={{ fontWeight: 700 }}>Anaesthetist's name &amp; signature</div>
+          <div style={{ fontWeight: 700, fontSize: 12 }}>
+            Anaesthetist's name &amp; signature
+          </div>
           <div
             style={{
               borderBottom: '1px solid #000',
-              minHeight: 36,
-              marginTop: 4,
-              padding: '2px 4px',
+              minHeight: 48,
+              marginTop: 6,
+              padding: '4px 6px',
+              fontSize: 12,
             }}
           >
-            {a.created_by_name ? `Dr. ${a.created_by_name}` : ''}
+            {doctorDisplayName || ''}
           </div>
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700 }}>Stamp</div>
-          <div style={{ border: '1px solid #000', height: 60, marginTop: 4 }} />
+          <div style={{ fontWeight: 700, fontSize: 12 }}>Stamp</div>
+          <div style={{ border: '1px solid #000', height: 72, marginTop: 6 }} />
         </div>
       </div>
     </div>

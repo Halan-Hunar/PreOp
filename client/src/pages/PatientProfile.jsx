@@ -44,6 +44,8 @@ export default function PatientProfile() {
 
   const canSeeClinical = hasRole('anaesthetist')
   const canAssignDoctor = hasRole('admin', 'receptionist')
+  // Anyone with edit access on the backend can see the Edit button.
+  const canEditPatient = hasRole('admin', 'anaesthetist', 'receptionist', 'nurse')
   const tabIds = canSeeClinical
     ? [BASE_TAB_IDS[0], ...CLINICAL_TAB_IDS, BASE_TAB_IDS[1]]
     : BASE_TAB_IDS
@@ -156,15 +158,28 @@ export default function PatientProfile() {
   return (
     <div className="space-y-6">
       <div>
-        <button
-          onClick={() => navigate('/patients')}
-          className="text-sm text-on-surface-variant hover:text-secondary inline-flex items-center gap-1 mb-3"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-            arrow_back
-          </span>
-          {t('patientProfile.back')}
-        </button>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <button
+            onClick={() => navigate('/patients')}
+            className="text-sm text-on-surface-variant hover:text-secondary inline-flex items-center gap-1"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+              arrow_back
+            </span>
+            {t('patientProfile.back')}
+          </button>
+          {canEditPatient && (
+            <button
+              onClick={() => navigate(`/patients/${id}/edit`)}
+              className="px-4 py-2 border border-outline-variant rounded-lg text-sm font-semibold text-on-surface hover:bg-surface-container-high transition-colors inline-flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                edit
+              </span>
+              {t('editPatient.button')}
+            </button>
+          )}
+        </div>
 
         <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="flex items-center gap-5">

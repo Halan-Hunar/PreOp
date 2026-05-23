@@ -13,6 +13,7 @@ import ExportMenu from '../components/ExportMenu'
 import AssessmentPrintForm from '../components/AssessmentPrintForm'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
+import { buildAssessmentSheets } from '../utils/assessmentExcel'
 import {
   exportNodeAsImage,
   exportNodeAsPdf,
@@ -291,7 +292,7 @@ export default function AssessmentForm() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user, hasRole } = useAuth()
-  const { t, lang } = useLanguage()
+  const { t, lang, formatName } = useLanguage()
   const localeTag = lang === 'ku' ? 'ku' : undefined
 
   const [loading, setLoading] = useState(true)
@@ -318,17 +319,20 @@ export default function AssessmentForm() {
         if (cancelled) return
         setAssessment(r.assessment)
 
-        // Parse the JSON-encoded extras out of `special_notes`, falling back
-        // to a fresh blank if it's not JSON (older records).
+        // Parse the JSON-encoded extras out of `extra_data` (preferred) with
+        // legacy fallback to `special_notes` for records saved before the
+        // schema migration. New saves only write to `extra_data`.
         const extra = (() => {
-          if (!r.assessment.special_notes) return blankExtra()
+          const src = r.assessment.extra_data || r.assessment.special_notes
+          if (!src) return blankExtra()
           try {
-            const parsed = JSON.parse(r.assessment.special_notes)
-            if (parsed && typeof parsed === 'object' && parsed.__extra) {
-              return { ...blankExtra(), ...parsed }
+            const parsed = typeof src === 'string' ? JSON.parse(src) : src
+            if (parsed && typeof parsed === 'object') {
+              const { __extra: _ignored, ...rest } = parsed
+              return { ...blankExtra(), ...rest }
             }
           } catch {
-            /* not JSON — old free-text note */
+            /* old free-text — start fresh */
           }
           return blankExtra()
         })()
@@ -432,8 +436,8 @@ export default function AssessmentForm() {
       anaesthetic_plan: f.anaesthetic_plan || null,
       anaesthetic_plan_details: f.anaesthetic_plan_details || null,
       risk_notes: f.risk_notes || null,
-      // Pack the structured extras into special_notes as JSON with a marker.
-      special_notes: JSON.stringify({ __extra: 1, ...f.extra }),
+      // Structured form data goes into the dedicated `extra_data` JSON column.
+      extra_data: { ...f.extra },
     }
     return Object.fromEntries(Object.entries(flat).filter(([, v]) => v !== null && v !== undefined && v !== ''))
   }
@@ -496,22 +500,25 @@ export default function AssessmentForm() {
   const filenameBase = `Assessment_${id}_${(assessment?.patient_name || 'patient').replace(/\s+/g, '_')}`
   const exportData = { ...assessment, ...formData, extra: formData.extra }
 
+  // Doctor display: when the logged-in user is the anaesthetist, the field
+  // represents *them* signing the form — show their own current full name
+  // regardless of who originally created the record. Admins viewing someone
+  // else's assessment fall back to the creator's name from the DB.
+  const doctorDisplayName = hasRole('anaesthetist')
+    ? formatName(user?.name, user?.role)
+    : formatName(assessment.created_by_name, 'anaesthetist')
+
   const handleExportPdf = async () => exportNodeAsPdf(printRef.current, `${filenameBase}.pdf`)
   const handleExportImage = async () => exportNodeAsImage(printRef.current, `${filenameBase}.png`)
   const handlePrint = () => printNode(printRef.current)
   const handleExportExcel = async () => {
-    const flat = {}
-    Object.entries(formData).forEach(([k, v]) => {
-      if (k === 'extra') return
-      flat[k] = typeof v === 'object' && v !== null ? JSON.stringify(v) : v
+    const sheets = buildAssessmentSheets({
+      assessment: { ...assessment, ...formData, extra: undefined },
+      extra: formData.extra,
+      doctorName: doctorDisplayName,
+      t,
     })
-    Object.entries(formData.extra || {}).forEach(([k, v]) => {
-      flat[`extra.${k}`] = typeof v === 'object' && v !== null ? JSON.stringify(v) : v
-    })
-    exportSheetsAsExcel(
-      [{ name: 'Assessment', rows: [flat] }],
-      `${filenameBase}.xlsx`
-    )
+    exportSheetsAsExcel(sheets, `${filenameBase}.xlsx`)
   }
 
   const canModify =
@@ -531,11 +538,18 @@ export default function AssessmentForm() {
   return (
     <>
       {/* Off-screen paper-replica used by Export image/pdf/print. */}
-      <AssessmentPrintForm ref={printRef} data={exportData} />
+      <AssessmentPrintForm
+        ref={printRef}
+        data={exportData}
+        doctorDisplayName={doctorDisplayName}
+      />
 
       <form onSubmit={handleSubmit} className="space-y-6 max-w-6xl mx-auto">
         {/* ─── Page header ───────────────────────────────────────── */}
-        <div className="flex items-start justify-between flex-wrap gap-4 anim-pop-in">
+        {/* relative + high z-index so the ExportMenu dropdown inside paints
+            above the section cards below (which each create their own
+            stacking context via anim-pop-in's transform). */}
+        <div className="relative z-30 flex items-start justify-between flex-wrap gap-4 anim-pop-in">
           <div>
             <button
               type="button"
@@ -1490,7 +1504,7 @@ export default function AssessmentForm() {
               />
             </Field>
             <Field label={t('form.anaesthetistName')}>
-              <input value={assessment.created_by_name || ''} disabled className={`${inputCls} opacity-75`} />
+              <input value={doctorDisplayName} disabled className={`${inputCls} opacity-75`} />
             </Field>
             <Field label={t('form.date')}>
               <input

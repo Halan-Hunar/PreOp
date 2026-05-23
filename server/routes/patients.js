@@ -179,8 +179,8 @@ router.post('/', authorize('receptionist', 'nurse'), [
   }
 });
 
-// PUT /api/patients/:id — update patient
-router.put('/:id', authorize('receptionist', 'nurse'), [
+// PUT /api/patients/:id — update patient (any clinical or front-desk staff)
+router.put('/:id', authorize('admin', 'anaesthetist', 'receptionist', 'nurse'), [
   body('full_name').optional().trim().notEmpty().isLength({ max: 100 }),
   body('dob').optional().isDate(),
   body('gender').optional().isIn(['male', 'female']),
