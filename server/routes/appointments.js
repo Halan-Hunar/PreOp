@@ -22,6 +22,12 @@ router.get('/', async (req, res) => {
     `;
     const params = [];
 
+    // Anaesthetists only see appointments assigned to them.
+    if (req.user.role === 'anaesthetist') {
+      queryStr += ' AND a.assigned_to = ?';
+      params.push(req.user.id);
+    }
+
     if (date) { queryStr += ' AND a.scheduled_date = ?'; params.push(date); }
     if (status) { queryStr += ' AND a.status = ?'; params.push(status); }
     if (patient_id) { queryStr += ' AND a.patient_id = ?'; params.push(patient_id); }
@@ -41,15 +47,24 @@ router.get('/', async (req, res) => {
 // GET /api/appointments/today — today's schedule
 router.get('/today', async (req, res) => {
   try {
-    const [appointments] = await db.query(
-      `SELECT a.*, p.full_name as patient_name, p.national_id, p.blood_type,
-              u.name as doctor_name
-       FROM appointments a
-       LEFT JOIN patients p ON a.patient_id = p.id
-       LEFT JOIN users u ON a.assigned_to = u.id
-       WHERE a.scheduled_date = CURDATE()
-       ORDER BY a.scheduled_time ASC`
-    );
+    let queryStr = `
+      SELECT a.*, p.full_name as patient_name, p.national_id, p.blood_type,
+             u.name as doctor_name
+      FROM appointments a
+      LEFT JOIN patients p ON a.patient_id = p.id
+      LEFT JOIN users u ON a.assigned_to = u.id
+      WHERE a.scheduled_date = CURDATE()
+    `;
+    const params = [];
+
+    if (req.user.role === 'anaesthetist') {
+      queryStr += ' AND a.assigned_to = ?';
+      params.push(req.user.id);
+    }
+
+    queryStr += ' ORDER BY a.scheduled_time ASC';
+
+    const [appointments] = await db.query(queryStr, params);
     res.json({ appointments });
   } catch (err) {
     console.error(err);
@@ -71,6 +86,11 @@ router.get('/:id', async (req, res) => {
 
     if (appointments.length === 0) {
       return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Anaesthetists can only view appointments assigned to them.
+    if (req.user.role === 'anaesthetist' && appointments[0].assigned_to !== req.user.id) {
+      return res.status(403).json({ error: 'This appointment is not assigned to you' });
     }
 
     res.json({ appointment: appointments[0] });
@@ -104,9 +124,12 @@ router.post('/', authorize('admin', 'receptionist', 'nurse'), [
     }
 
     // Check doctor exists and is anaesthetist
-    const [doctors] = await db.query('SELECT id FROM users WHERE id = ? AND is_active = TRUE', [assigned_to]);
+    const [doctors] = await db.query(
+      "SELECT id FROM users WHERE id = ? AND role = 'anaesthetist' AND is_active = TRUE",
+      [assigned_to]
+    );
     if (doctors.length === 0) {
-      return res.status(404).json({ error: 'Assigned user not found' });
+      return res.status(404).json({ error: 'Anaesthetist not found' });
     }
 
     // Check for time conflict

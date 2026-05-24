@@ -10,10 +10,10 @@ const app = express();
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '500kb' }));
 app.use(cookieParser());
 
 // Rate limit only the login endpoint (POST /api/auth/login).
@@ -25,6 +25,16 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
   message: { error: 'Too many login attempts. Try again later.' },
 });
+
+// General API limiter — catch-all to prevent hammering authenticated endpoints.
+// Login has its own stricter limiter above; skip here to avoid double-counting.
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  skip: (req) => req.path === '/auth/login',
+  message: { error: 'Too many requests. Please slow down.' },
+});
+app.use('/api/', generalLimiter);
 
 // Routes — limiter wired to /login only so /me and /logout aren't throttled.
 const authRouter = require('./routes/auth');

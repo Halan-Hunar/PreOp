@@ -1,5 +1,10 @@
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
+
+// Must match the hashing in routes/auth.js — sessions are looked up by SHA-256
+// of the bearer token, never by the raw token itself.
+const hashToken = (t) => crypto.createHash('sha256').update(t).digest('hex');
 
 const auth = async (req, res, next) => {
   try {
@@ -14,7 +19,7 @@ const auth = async (req, res, next) => {
     // Check if session is still valid in DB
     const [sessions] = await db.query(
       'SELECT * FROM sessions WHERE token_hash = ? AND expires_at > NOW()',
-      [token]
+      [hashToken(token)]
     );
 
     if (sessions.length === 0) {

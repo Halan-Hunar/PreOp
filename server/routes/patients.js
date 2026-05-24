@@ -147,10 +147,11 @@ router.post('/', authorize('receptionist', 'nurse'), [
       address, emergency_contact_name, emergency_contact_phone, emergency_contact_relation
     } = req.body;
 
-    // Check duplicate national ID
+    // Check duplicate national ID — only among active patients, so a soft-deleted
+    // record doesn't permanently block its national_id from being reused.
     if (national_id) {
       const [existing] = await db.query(
-        'SELECT id FROM patients WHERE national_id = ?',
+        'SELECT id FROM patients WHERE national_id = ? AND is_active = TRUE',
         [national_id]
       );
       if (existing.length > 0) {
@@ -201,6 +202,11 @@ router.put('/:id', authorize('admin', 'anaesthetist', 'receptionist', 'nurse'), 
 
     if (patients.length === 0) {
       return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    // Anaesthetists may only edit patients explicitly assigned to them.
+    if (req.user.role === 'anaesthetist' && patients[0].assigned_doctor_id !== req.user.id) {
+      return res.status(403).json({ error: 'This patient is not assigned to you' });
     }
 
     const allowed = ['full_name','dob','gender','blood_type','phone','email',

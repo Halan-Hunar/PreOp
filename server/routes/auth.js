@@ -1,10 +1,15 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const db = require('../config/db');
 const { auth } = require('../middleware/auth');
+
+// Store SHA-256(token) in the sessions table instead of the raw JWT.
+// If the DB ever leaks, the hash isn't directly replayable as a bearer token.
+const hashToken = (t) => crypto.createHash('sha256').update(t).digest('hex');
 
 // POST /api/auth/login
 router.post('/login', [
@@ -65,7 +70,7 @@ router.post('/login', [
     // Store session
     await db.query(
       'INSERT INTO sessions (user_id, token_hash, ip_address, user_agent, expires_at) VALUES (?, ?, ?, ?, ?)',
-      [user.id, token, ip, userAgent, expiresAt]
+      [user.id, hashToken(token), ip, userAgent, expiresAt]
     );
 
     // Update last login
@@ -98,7 +103,7 @@ router.post('/logout', auth, async (req, res) => {
   try {
     const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
 
-    await db.query('DELETE FROM sessions WHERE token_hash = ?', [token]);
+    await db.query('DELETE FROM sessions WHERE token_hash = ?', [hashToken(token)]);
 
     await db.query(
       'INSERT INTO activity_logs (user_id, action) VALUES (?, ?)',
