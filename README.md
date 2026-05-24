@@ -1,6 +1,6 @@
 # PreOp — Pre-Operative Assessment System
 
-A full-stack web application for managing pre-surgery patient assessments in an ENT clinic. Built for the Software Construction course (SCSJ4383/SCJ4383).
+A full-stack web application for managing pre-surgery patient assessments in an ENT clinic. 
 
 ## Features
 
