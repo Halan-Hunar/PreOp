@@ -1,0 +1,11 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1781278172413,25,HTTP Request,200,OK,Thread Group 1-1,text,true,,1078,127,1,1,http://localhost:5000/api/health,25,0,3
+1781278172513,9,HTTP Request,200,OK,Thread Group 1-2,text,true,,1078,127,1,1,http://localhost:5000/api/health,8,0,1
+1781278172616,11,HTTP Request,200,OK,Thread Group 1-3,text,true,,1078,127,1,1,http://localhost:5000/api/health,11,0,2
+1781278172726,11,HTTP Request,200,OK,Thread Group 1-4,text,true,,1078,127,1,1,http://localhost:5000/api/health,11,0,1
+1781278172820,8,HTTP Request,200,OK,Thread Group 1-5,text,true,,1078,127,1,1,http://localhost:5000/api/health,8,0,1
+1781278172898,9,HTTP Request,200,OK,Thread Group 1-6,text,true,,1078,127,1,1,http://localhost:5000/api/health,9,0,2
+1781278173000,8,HTTP Request,200,OK,Thread Group 1-7,text,true,,1078,127,1,1,http://localhost:5000/api/health,8,0,1
+1781278173100,11,HTTP Request,200,OK,Thread Group 1-8,text,true,,1078,127,1,1,http://localhost:5000/api/health,11,0,1
+1781278173200,16,HTTP Request,200,OK,Thread Group 1-9,text,true,,1078,127,1,1,http://localhost:5000/api/health,16,0,1
+1781278173298,10,HTTP Request,200,OK,Thread Group 1-10,text,true,,1078,127,1,1,http://localhost:5000/api/health,10,0,2
