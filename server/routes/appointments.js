@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const db = require('../config/db');
 const { auth, authorize } = require('../middleware/auth');
+const { logActivity } = require('../utils/activityLog');
 
 router.use(auth);
 
@@ -148,10 +149,7 @@ router.post('/', authorize('admin', 'receptionist', 'nurse'), [
       [patient_id, assigned_to, scheduled_date, scheduled_time, surgery_type, notes, req.user.id]
     );
 
-    await db.query(
-      'INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, ?, ?, ?)',
-      [req.user.id, 'create_appointment', 'appointments', result.insertId]
-    );
+    await logActivity(req.user.id, 'create_appointment', 'appointments', result.insertId);
 
     res.status(201).json({ message: 'Appointment created', id: result.insertId });
   } catch (err) {
@@ -193,10 +191,7 @@ router.put('/:id', authorize('admin', 'receptionist', 'nurse'), [
 
     await db.query(`UPDATE appointments SET ${fields} WHERE id = ?`, values);
 
-    await db.query(
-      'INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, ?, ?, ?)',
-      [req.user.id, 'update_appointment', 'appointments', req.params.id]
-    );
+    await logActivity(req.user.id, 'update_appointment', 'appointments', req.params.id);
 
     res.json({ message: 'Appointment updated' });
   } catch (err) {

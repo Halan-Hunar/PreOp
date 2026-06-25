@@ -3,9 +3,27 @@ const router = express.Router();
 const { body, query, validationResult } = require('express-validator');
 const db = require('../config/db');
 const { auth, authorize } = require('../middleware/auth');
+const { logActivity } = require('../utils/activityLog');
 
 // All routes require auth
 router.use(auth);
+
+// Builds the WHERE-clause fragment + params shared by the list and count queries.
+function buildPatientFilters(user, search) {
+  let clause = '';
+  const params = [];
+
+  if (user.role === 'anaesthetist') {
+    clause += ' AND assigned_doctor_id = ?';
+    params.push(user.id);
+  }
+  if (search) {
+    clause += ' AND (full_name LIKE ? OR national_id LIKE ? OR phone LIKE ?)';
+    const like = `%${search}%`;
+    params.push(like, like, like);
+  }
+  return { clause, params };
+}
 
 // GET /api/patients — list all patients with search/filter
 router.get('/', async (req, res) => {
@@ -13,41 +31,18 @@ router.get('/', async (req, res) => {
     const { search, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
-    let queryStr = `
+    const { clause, params: filterParams } = buildPatientFilters(req.user, search);
+
+    const listStr = `
       SELECT id, full_name, dob, gender, blood_type, national_id, phone, email,
              assigned_doctor_id, created_at
-      FROM patients WHERE is_active = TRUE
+      FROM patients WHERE is_active = TRUE${clause}
+      ORDER BY created_at DESC LIMIT ? OFFSET ?
     `;
-    const params = [];
+    const [patients] = await db.query(listStr, [...filterParams, parseInt(limit), parseInt(offset)]);
 
-    // Anaesthetists only see patients explicitly assigned to them.
-    if (req.user.role === 'anaesthetist') {
-      queryStr += ' AND assigned_doctor_id = ?';
-      params.push(req.user.id);
-    }
-
-    if (search) {
-      queryStr += ` AND (full_name LIKE ? OR national_id LIKE ? OR phone LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-    }
-
-    queryStr += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
-    params.push(parseInt(limit), parseInt(offset));
-
-    const [patients] = await db.query(queryStr, params);
-
-    // Total count for pagination — must apply the same filters
-    let countStr = 'SELECT COUNT(*) as total FROM patients WHERE is_active = TRUE';
-    const countParams = [];
-    if (req.user.role === 'anaesthetist') {
-      countStr += ' AND assigned_doctor_id = ?';
-      countParams.push(req.user.id);
-    }
-    if (search) {
-      countStr += ' AND (full_name LIKE ? OR national_id LIKE ? OR phone LIKE ?)';
-      countParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
-    }
-    const [countResult] = await db.query(countStr, countParams);
+    const countStr = `SELECT COUNT(*) as total FROM patients WHERE is_active = TRUE${clause}`;
+    const [countResult] = await db.query(countStr, filterParams);
 
     res.json({
       patients,
@@ -168,10 +163,7 @@ router.post('/', authorize('receptionist', 'nurse'), [
        address, emergency_contact_name, emergency_contact_phone, emergency_contact_relation, req.user.id]
     );
 
-    await db.query(
-      'INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, ?, ?, ?)',
-      [req.user.id, 'create_patient', 'patients', result.insertId]
-    );
+    await logActivity(req.user.id, 'create_patient', 'patients', result.insertId);
 
     res.status(201).json({ message: 'Patient registered', id: result.insertId });
   } catch (err) {
@@ -225,10 +217,7 @@ router.put('/:id', authorize('admin', 'anaesthetist', 'receptionist', 'nurse'), 
 
     await db.query(`UPDATE patients SET ${fields} WHERE id = ?`, values);
 
-    await db.query(
-      'INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, ?, ?, ?)',
-      [req.user.id, 'update_patient', 'patients', req.params.id]
-    );
+    await logActivity(req.user.id, 'update_patient', 'patients', req.params.id);
 
     res.json({ message: 'Patient updated' });
   } catch (err) {
@@ -268,10 +257,7 @@ router.put('/:id/assign-doctor', authorize('admin', 'receptionist'), [
       [req.body.doctor_id, req.params.id]
     );
 
-    await db.query(
-      'INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, ?, ?, ?)',
-      [req.user.id, 'assign_doctor', 'patients', req.params.id]
-    );
+    await logActivity(req.user.id, 'assign_doctor', 'patients', req.params.id);
 
     res.json({ message: 'Doctor assigned successfully' });
   } catch (err) {
@@ -294,10 +280,7 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
 
     await db.query('UPDATE patients SET is_active = FALSE WHERE id = ?', [req.params.id]);
 
-    await db.query(
-      'INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, ?, ?, ?)',
-      [req.user.id, 'delete_patient', 'patients', req.params.id]
-    );
+    await logActivity(req.user.id, 'delete_patient', 'patients', req.params.id);
 
     res.json({ message: 'Patient deactivated' });
   } catch (err) {
